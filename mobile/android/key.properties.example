@@ -1,0 +1,11 @@
+# ==============================================================================
+# Phyto Doctor Android Release Keystore Configuration Template
+# ==============================================================================
+# Copy this file to 'key.properties' in mobile/android/ (do NOT commit key.properties to Git)
+# Generate a new release keystore using:
+# keytool -genkey -v -keystore phytodoctor-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias phytodoctor_key
+
+storePassword=YOUR_STORE_PASSWORD_HERE
+keyPassword=YOUR_KEY_PASSWORD_HERE
+keyAlias=phytodoctor_key
+storeFile=../keystores/phytodoctor-release.jks
