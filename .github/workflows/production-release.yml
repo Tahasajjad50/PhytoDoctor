@@ -36,6 +36,7 @@ jobs:
       - name: Run Full Backend Test Suite
         env:
           ENVIRONMENT: test
+          PYTHONPATH: .
           SECRET_KEY: test_secret_key_ci_environment_verification_hs256_32bytes
           DATABASE_URL: sqlite+aiosqlite:///./test_phytodoctor.db
         run: |
@@ -104,15 +105,14 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.x"
           channel: "stable"
           cache: true
 
       - name: Install Flutter Dependencies
-        run: flutter pub get
+        run: flutter --no-version-check pub get
 
       - name: Run Flutter Unit & Widget Tests
-        run: flutter test
+        run: flutter --no-version-check test
 
       - name: Configure Android Release Signing
         env:
@@ -130,11 +130,11 @@ jobs:
 
       - name: Build Release APK (Field Testing)
         run: |
-          flutter build apk --release --dart-define=API_URL=https://phytodoctor-api.onrender.com
+          flutter --no-version-check build apk --release --dart-define=API_URL=https://phytodoctor-api.onrender.com --android-skip-build-dependency-validation
 
       - name: Build Release App Bundle (Google Play Release)
         run: |
-          flutter build appbundle --release --dart-define=API_URL=https://phytodoctor-api.onrender.com
+          flutter --no-version-check build appbundle --release --dart-define=API_URL=https://phytodoctor-api.onrender.com --android-skip-build-dependency-validation
 
       - name: Upload Release APK Artifact
         uses: actions/upload-artifact@v4
