@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/share_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'account_directory_screen.dart';
 import 'chat_list_screen.dart';
@@ -941,20 +941,17 @@ Password: $password
 Server Address: ${AuthService.defaultBaseUrl}
 ''';
               Clipboard.setData(ClipboardData(text: shareText));
-              try {
-                await SharePlus.instance.share(
-                  shareText,
-                  subject: 'PhytoDoctor Account Credentials - $name',
+              await NativeShareService.share(
+                text: shareText,
+                subject: 'PhytoDoctor Account Credentials - $name',
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Credentials ready to share or paste!'),
+                    backgroundColor: AppTheme.cropGreen,
+                  ),
                 );
-              } catch (_) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Credentials copied to clipboard! Ready to share via WhatsApp, SMS, or Email.'),
-                      backgroundColor: AppTheme.cropGreen,
-                    ),
-                  );
-                }
               }
             },
           ),

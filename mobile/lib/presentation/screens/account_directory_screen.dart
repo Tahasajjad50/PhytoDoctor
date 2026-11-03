@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:share_plus/share_plus.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/share_service.dart';
 import '../../core/theme/app_theme.dart';
 
 class AccountDirectoryScreen extends StatefulWidget {
@@ -83,21 +83,18 @@ Server Address: ${AuthService.defaultBaseUrl}
 ''';
 
     Clipboard.setData(ClipboardData(text: shareText.trim()));
-    try {
-      await SharePlus.instance.share(
-        shareText.trim(),
-        subject: 'PhytoDoctor App Access Credentials - ${account.fullName}',
+    await NativeShareService.share(
+      text: shareText.trim(),
+      subject: 'PhytoDoctor App Access Credentials - ${account.fullName}',
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Credentials for ${account.fullName} ready to share or paste!'),
+          backgroundColor: AppTheme.cropGreen,
+          duration: const Duration(seconds: 3),
+        ),
       );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Credentials for ${account.fullName} copied to clipboard!'),
-            backgroundColor: AppTheme.cropGreen,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
     }
   }
 
