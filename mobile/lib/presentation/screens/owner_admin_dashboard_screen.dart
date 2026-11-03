@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/auth_service.dart';
@@ -834,15 +835,11 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                             }
                           } catch (e) {
                             Navigator.pop(dialogCtx);
-                            _showAdminCreatedConfirmation(
-                              context,
-                              role: chosenRole,
-                              name: nameCtrl.text.trim(),
-                              phone: phoneCtrl.text.trim(),
-                              designation: designationCtrl.text.trim(),
-                              username: accUsername,
-                              email: accEmail,
-                              password: accPassword,
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error connecting to server: ${e.toString()}'),
+                                backgroundColor: AppTheme.alertCrimson,
+                              ),
                             );
                           }
                         },
@@ -929,7 +926,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               backgroundColor: AppTheme.botanicalPrimary,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
+            onPressed: () async {
               final shareText = '''🌿 PhytoDoctor Account Credentials 🌿
 Name: $name
 Phone: $phone
@@ -944,12 +941,21 @@ Password: $password
 Server Address: ${AuthService.defaultBaseUrl}
 ''';
               Clipboard.setData(ClipboardData(text: shareText));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Credentials copied to clipboard! Ready to share via WhatsApp, SMS, or Email.'),
-                  backgroundColor: AppTheme.cropGreen,
-                ),
-              );
+              try {
+                await SharePlus.instance.share(
+                  shareText,
+                  subject: 'PhytoDoctor Account Credentials - $name',
+                );
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Credentials copied to clipboard! Ready to share via WhatsApp, SMS, or Email.'),
+                      backgroundColor: AppTheme.cropGreen,
+                    ),
+                  );
+                }
+              }
             },
           ),
           const SizedBox(width: 8),

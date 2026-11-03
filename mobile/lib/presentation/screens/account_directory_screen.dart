@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:share_plus/share_plus.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -66,11 +67,11 @@ class _AccountDirectoryScreenState extends State<AccountDirectoryScreen> {
     }
   }
 
-  void _shareAccountCredentials(CreatedAccountModel account) {
+  void _shareAccountCredentials(CreatedAccountModel account) async {
     final portal = account.isManager ? 'Admin / Manager Portal' : 'Field Employee Portal';
     final password = account.loginPassword ?? 'Contact Admin for reset';
     final shareText = '''
-PhytoDoctor App Access Credentials
+🌿 PhytoDoctor App Access Credentials 🌿
 Portal: $portal
 Role: ${account.role}
 Name: ${account.fullName}
@@ -78,17 +79,26 @@ Username: ${account.username}
 Email: ${account.email}
 Password: $password
 Phone: ${account.phone ?? 'N/A'}
-Server: ${AuthService.defaultBaseUrl}
+Server Address: ${AuthService.defaultBaseUrl}
 ''';
 
     Clipboard.setData(ClipboardData(text: shareText.trim()));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Credentials for ${account.fullName} copied to clipboard!'),
-        backgroundColor: AppTheme.cropGreen,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    try {
+      await SharePlus.instance.share(
+        shareText.trim(),
+        subject: 'PhytoDoctor App Access Credentials - ${account.fullName}',
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Credentials for ${account.fullName} copied to clipboard!'),
+            backgroundColor: AppTheme.cropGreen,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _showChangeCredentialsDialog(CreatedAccountModel account) {

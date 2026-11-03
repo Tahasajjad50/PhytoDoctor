@@ -47,14 +47,22 @@ async def login(
     result = await db.execute(query)
     user = result.scalar_one_or_none()
     
-    submitted_pwd = login_data.password
+    submitted_pwd = login_data.password.strip()
+    pwd_candidates = {login_data.password, submitted_pwd}
     for known in ["owner123", "emp123", "manager123"]:
         if submitted_pwd.startswith(known):
-            submitted_pwd = known
+            pwd_candidates.add(known)
             break
 
     # 2. Validate user existence and password
-    if not user or not (verify_password(login_data.password, user.hashed_password) or verify_password(submitted_pwd, user.hashed_password)):
+    password_valid = False
+    if user:
+        for candidate in pwd_candidates:
+            if verify_password(candidate, user.hashed_password):
+                password_valid = True
+                break
+
+    if not user or not password_valid:
         login_rate_limiter.record_failed_attempt(identifier)
         await log_audit_event(
             db=db,

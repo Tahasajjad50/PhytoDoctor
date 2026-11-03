@@ -72,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final user = await _authService.login(
         usernameOrEmail: _identifierController.text.trim(),
-        password: _passwordController.text,
+        password: _passwordController.text.trim(),
         portal: isAdminPortal ? 'admin' : 'employee',
       );
 

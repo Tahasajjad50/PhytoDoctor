@@ -8,17 +8,17 @@ class AppConfig {
 
   // Environment-specific configuration with compile-time overrides
   // e.g. flutter run --dart-define=API_URL=https://api.phytodoctor.pk
-  // Default dev URL points to local PC Wi-Fi IP (192.168.1.15:8000) so both physical
-  // mobile phones and the emulator can reach the backend simultaneously.
-  static const String _defaultDevUrl = 'http://192.168.1.15:8000';
-  static const String _defaultProdUrl = 'https://api.phytodoctor.pk';
+  // Production Render Cloud API URL:
+  static const String _defaultCloudUrl = 'https://phytodoctor-api.onrender.com';
+  static const String _defaultDevUrl = 'https://phytodoctor-api.onrender.com';
+  static const String _defaultProdUrl = 'https://phytodoctor-api.onrender.com';
 
   static String get apiBaseUrl {
     const definedUrl = String.fromEnvironment('API_URL');
     if (definedUrl.isNotEmpty) {
       return definedUrl;
     }
-    return kReleaseMode ? _defaultProdUrl : _defaultDevUrl;
+    return _defaultCloudUrl;
   }
 
   static Environment get environment {
