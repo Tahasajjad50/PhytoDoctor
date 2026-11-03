@@ -94,3 +94,6 @@ mobile/ios/Release
 *~
 .DS_Store
 Thumbs.db
+
+*.apk
+
