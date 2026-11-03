@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../core/models/user_model.dart';
+import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/phyto_logo.dart';
@@ -41,6 +41,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _authService = widget.authService ?? AuthService();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppUpdateService.checkAndPromptUpdate(context);
+    });
     if (kDebugMode) {
       if (isAdminPortal) {
         _identifierController.text = 'MehmoodAyyaz';
@@ -62,6 +65,11 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final isBlocked = await AppUpdateService.checkAndPromptUpdate(context);
+    if (isBlocked) {
       return;
     }
 

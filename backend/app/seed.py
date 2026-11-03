@@ -6,16 +6,36 @@ from app.core.security import get_password_hash
 from app.models.target import EmployeeTarget, TargetPeriod
 from app.models.user import User, UserRole
 from app.models.visit import FieldVisit, VisitStatus
+from app.models.app_version import AppVersionConfig
 
 async def seed_data():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         
     async with AsyncSessionLocal() as session:
+        # 1. Seed or ensure default AppVersionConfig exists
+        res_v = await session.execute(select(AppVersionConfig).where(AppVersionConfig.id == 1))
+        version_config = res_v.scalars().first()
+        if not version_config:
+            version_config = AppVersionConfig(
+                id=1,
+                latest_version="1.0.0",
+                latest_build_number=1,
+                min_required_build_number=1,
+                force_update=True,
+                title="Update Required",
+                message="A newer official version of PhytoDoctor is available. Please update to continue using the application.",
+                release_notes="Official release with Employee Attendance Roster, Field Clock-In/Out, and Offline Sync.",
+                download_url="https://phytodoctor-api.onrender.com/api/v1/system/download-apk",
+            )
+            session.add(version_config)
+            await session.commit()
+
+        # 2. Seed initial users if table is empty
         result = await session.execute(select(User))
         existing_users = result.scalars().all()
         if existing_users:
-            print("Database already contains user records. Skipping seed.")
+            print("Database already contains user records. Skipping user seed.")
             return
 
         mehmood = User(

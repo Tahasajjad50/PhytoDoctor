@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'account_directory_screen.dart';
@@ -32,6 +33,9 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     super.initState();
     _loadPendingVisits();
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) => _loadPendingVisits());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppUpdateService.checkAndPromptUpdate(context);
+    });
   }
 
   @override

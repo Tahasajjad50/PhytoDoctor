@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/models/attendance_model.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/app_update_service.dart';
 import '../../core/services/attendance_service.dart';
 import '../../core/services/native_platform_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -65,9 +66,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     _pendingSyncCount = _syncManager.pendingCount;
     _syncManager.addListener(_onSyncManagerUpdated);
     _syncManager.initialize();
-    // Auto-prompt runtime permissions (Camera & GPS Location)
+    // Auto-prompt runtime permissions (Camera & GPS Location) and check mandatory updates
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NativePlatformService.requestPermissions();
+      AppUpdateService.checkAndPromptUpdate(context);
     });
     // Non-blocking background fetch
     _loadDashboardData();

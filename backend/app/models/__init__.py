@@ -7,6 +7,7 @@ from app.models.audit import AuditEvent
 from app.models.chat import ChatRoom, ChatRoomType, ChatMessage
 from app.models.customer import Customer, CustomerType
 from app.models.attendance import Attendance
+from app.models.app_version import AppVersionConfig
 
 __all__ = [
     "User",
@@ -23,4 +24,5 @@ __all__ = [
     "Customer",
     "CustomerType",
     "Attendance",
+    "AppVersionConfig",
 ]

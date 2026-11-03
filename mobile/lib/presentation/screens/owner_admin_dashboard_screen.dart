@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/share_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -43,6 +44,9 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
     super.initState();
     _fetchLiveStats();
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) => _fetchLiveStats());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppUpdateService.checkAndPromptUpdate(context);
+    });
   }
 
   @override
@@ -328,6 +332,18 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                     ),
                   );
                 },
+              ),
+
+              const SizedBox(height: 10),
+
+              // App Version & In-App Update Distribution
+              _AdminTile(
+                icon: Icons.system_update_outlined,
+                title: 'In-App Update & Version Control',
+                subtitle: 'Enforce mandatory update popup, view current build & download link',
+                badgeText: 'v1.0.0 (B1)',
+                badgeColor: AppTheme.botanicalPrimary,
+                onTap: () => _showAppUpdateManagerDialog(context),
               ),
 
               const SizedBox(height: 10),
@@ -1304,6 +1320,65 @@ Server Address: ${AuthService.defaultBaseUrl}
           );
         },
       ),
+    );
+  }
+
+  void _showAppUpdateManagerDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(Icons.system_update_outlined, color: AppTheme.botanicalPrimary),
+              SizedBox(width: 8),
+              Text('In-App Update System', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Automatic In-App Updates ensure all 20 field staff and testers always use the latest features.',
+                style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.sageLight,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.sageBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Text('Installed App Version: v1.0.0 (Build 1)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textMain)),
+                    SizedBox(height: 4),
+                    Text('Update Status: Active on Cloud', style: TextStyle(fontSize: 12, color: AppTheme.cropGreen, fontWeight: FontWeight.w600)),
+                    SizedBox(height: 4),
+                    Text('Enforcement: Pre-login blocking popup', style: TextStyle(fontSize: 12, color: AppTheme.adminSlate)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'To push updates to all 20 users with a single click, run "Publish_New_Update.bat" on your computer.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.botanicalPrimary, foregroundColor: Colors.white),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

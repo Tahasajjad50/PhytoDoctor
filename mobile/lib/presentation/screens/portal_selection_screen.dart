@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/services/app_update_service.dart';
 import '../../core/services/native_platform_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/phyto_logo.dart';
@@ -15,9 +16,12 @@ class _PortalSelectionScreenState extends State<PortalSelectionScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-prompt runtime permissions (Camera & Location) on app startup
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      NativePlatformService.requestPermissions();
+    // Auto-prompt runtime permissions (Camera & Location) and check mandatory app updates on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await NativePlatformService.requestPermissions();
+      if (mounted) {
+        AppUpdateService.checkAndPromptUpdate(context);
+      }
     });
   }
 
