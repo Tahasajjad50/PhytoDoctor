@@ -8,6 +8,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'account_directory_screen.dart';
 import 'chat_list_screen.dart';
+import 'employee_attendance_screen.dart';
 import 'portal_selection_screen.dart';
 import 'profile_settings_screen.dart';
 import 'visit_detail_screen.dart';
@@ -548,15 +549,34 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.cropGreenLight,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'Live Tracking Active',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.cropGreen),
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EmployeeAttendanceScreen(currentUser: widget.user),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.botanicalPrimary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppTheme.botanicalPrimary.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.how_to_reg, size: 12, color: AppTheme.botanicalPrimary),
+                          SizedBox(width: 4),
+                          Text(
+                            'Staff Attendance',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.botanicalPrimary),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

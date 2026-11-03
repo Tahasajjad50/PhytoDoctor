@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/models/attendance_model.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/attendance_service.dart';
 import '../../core/services/native_platform_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/mock_visit_repository.dart';
@@ -49,6 +51,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   String? _designation;
   String? _supervisorName;
 
+  // Employee Daily Attendance State
+  final AttendanceService _attendanceService = AttendanceService();
+  bool _isAttendanceActive = false;
+  DateTime? _clockInTime;
+  DateTime? _clockOutTime;
+  bool _isTogglingAttendance = false;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +71,75 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     });
     // Non-blocking background fetch
     _loadDashboardData();
+    _loadAttendanceStatus();
+  }
+
+  Future<void> _loadAttendanceStatus() async {
+    final token = widget.user.accessToken;
+    if (token == null || token.isEmpty) return;
+    try {
+      final status = await _attendanceService.getStatus(token);
+      if (mounted) {
+        setState(() {
+          _isAttendanceActive = status.isActive;
+          _clockInTime = status.clockInTime;
+          _clockOutTime = status.clockOutTime;
+        });
+      }
+    } catch (_) {
+      // Offline fallback: keep default
+    }
+  }
+
+  Future<void> _toggleAttendance() async {
+    final token = widget.user.accessToken;
+    if (token == null || token.isEmpty) return;
+
+    setState(() => _isTogglingAttendance = true);
+    try {
+      AttendanceStatusModel res;
+      if (_isAttendanceActive) {
+        res = await _attendanceService.clockOut(token);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Marked as Inactive (Clocked Out)'),
+              backgroundColor: AppTheme.adminSlate,
+            ),
+          );
+        }
+      } else {
+        res = await _attendanceService.clockIn(token);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Marked as Active (Clocked In). Active status broadcasted to Admin.'),
+              backgroundColor: AppTheme.cropGreen,
+            ),
+          );
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _isAttendanceActive = res.isActive;
+          _clockInTime = res.clockInTime;
+          _clockOutTime = res.clockOutTime;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Attendance error: ${e.toString().replaceAll("Exception: ", "")}'),
+            backgroundColor: AppTheme.alertCrimson,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTogglingAttendance = false);
+      }
+    }
   }
 
   @override
@@ -271,6 +349,116 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                               style: const TextStyle(fontSize: 12, color: AppTheme.textMuted, fontWeight: FontWeight.w500),
                                             ),
                                         ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(height: 14),
+
+                                // Field Agronomist Attendance & Portal Active Status
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: _isAttendanceActive ? AppTheme.cropGreenLight.withOpacity(0.4) : AppTheme.surfaceCard,
+                                    borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+                                    border: Border.all(
+                                      color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.sageBorder,
+                                      width: _isAttendanceActive ? 1.5 : 1.0,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Container(
+                                                width: 10,
+                                                height: 10,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.textMuted,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _isAttendanceActive ? 'PORTAL STATUS: ACTIVE ON DUTY' : 'PORTAL STATUS: OFF DUTY',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.textMuted,
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.sageLight,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: const Text(
+                                              'FIELD ONLY',
+                                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.botanicalPrimary),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('Mark In Time', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  _clockInTime != null
+                                                      ? '${_clockInTime!.hour.toString().padLeft(2, '0')}:${_clockInTime!.minute.toString().padLeft(2, '0')} ${_clockInTime!.hour >= 12 ? 'PM' : 'AM'}'
+                                                      : '--:--',
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('Mark Out Time', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  _clockOutTime != null
+                                                      ? '${_clockOutTime!.hour.toString().padLeft(2, '0')}:${_clockOutTime!.minute.toString().padLeft(2, '0')} ${_clockOutTime!.hour >= 12 ? 'PM' : 'AM'}'
+                                                      : (_isAttendanceActive ? 'On Duty' : '--:--'),
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.textMain,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      ElevatedButton.icon(
+                                        onPressed: _isTogglingAttendance ? null : _toggleAttendance,
+                                        icon: _isTogglingAttendance
+                                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                            : Icon(_isAttendanceActive ? Icons.logout : Icons.how_to_reg, size: 18),
+                                        label: Text(_isAttendanceActive ? 'Mark as Inactive (Clock Out)' : 'Mark as Active (Clock In)'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _isAttendanceActive ? AppTheme.adminSlate : AppTheme.botanicalPrimary,
+                                          foregroundColor: Colors.white,
+                                          minimumSize: const Size(double.infinity, 44),
+                                        ),
                                       ),
                                     ],
                                   ),

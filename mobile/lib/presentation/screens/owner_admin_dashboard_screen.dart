@@ -10,6 +10,7 @@ import '../../core/services/share_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'account_directory_screen.dart';
 import 'chat_list_screen.dart';
+import 'employee_attendance_screen.dart';
 import 'employee_location_tracking_screen.dart';
 import 'manager_dashboard_screen.dart';
 import 'portal_selection_screen.dart';
@@ -27,7 +28,8 @@ class OwnerAdminDashboardScreen extends StatefulWidget {
 
 class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
   int _pendingCount = 0;
-  int _activeEmployees = 1;
+  int _activeEmployees = 0;
+  int _totalEmployees = 0;
   int _todayVisits = 0;
   int _verifiedVisits = 0;
   double _verificationRate = 100.0;
@@ -67,6 +69,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
         setState(() {
           _pendingCount = (data['pending_verifications'] as num?)?.toInt() ?? 0;
           _activeEmployees = (data['active_employees'] as num?)?.toInt() ?? 0;
+          _totalEmployees = (data['total_employees'] as num?)?.toInt() ?? _activeEmployees;
           _todayVisits = (data['today_field_visits'] as num?)?.toInt() ?? 0;
           _verifiedVisits = (data['verified_visits'] as num?)?.toInt() ?? 0;
           _verificationRate = (data['verified_percentage'] as num?)?.toDouble() ?? 100.0;
@@ -253,8 +256,16 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                     child: _OwnerKpiCard(
                       title: 'Field Agronomists',
                       value: '$_activeEmployees Active',
-                      subtitle: '$_activeEmployees staff registered',
+                      subtitle: '$_totalEmployees staff registered • Tap for Roster',
                       color: AppTheme.adminSlate,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EmployeeAttendanceScreen(currentUser: user),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -300,6 +311,25 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                 'Company Operations & Administration',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
               ),
+              const SizedBox(height: 10),
+
+              // Employee Attendance & Active Status Roster
+              _AdminTile(
+                icon: Icons.how_to_reg_outlined,
+                title: 'Employee Attendance & Active Status',
+                subtitle: 'View live active roster, clock-in & clock-out timestamps for all staff',
+                badgeText: '$_activeEmployees ACTIVE',
+                badgeColor: AppTheme.verifiedGreen,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EmployeeAttendanceScreen(currentUser: user),
+                    ),
+                  );
+                },
+              ),
+
               const SizedBox(height: 10),
 
               // Check Employee Location (Dedicated tracking screen)
@@ -1283,6 +1313,7 @@ class _OwnerKpiCard extends StatelessWidget {
   final String value;
   final String subtitle;
   final Color color;
+  final VoidCallback? onTap;
 
   const _OwnerKpiCard({
     Key? key,
@@ -1290,11 +1321,12 @@ class _OwnerKpiCard extends StatelessWidget {
     required this.value,
     required this.subtitle,
     required this.color,
+    this.onTap,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
@@ -1304,13 +1336,20 @@ class _OwnerKpiCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: color,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+              if (onTap != null)
+                Icon(Icons.arrow_forward_ios, size: 12, color: color.withOpacity(0.6)),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
@@ -1325,6 +1364,16 @@ class _OwnerKpiCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+        child: content,
+      );
+    }
+
+    return content;
   }
 }
 

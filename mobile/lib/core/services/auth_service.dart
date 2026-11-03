@@ -45,13 +45,15 @@ class AuthService extends ChangeNotifier {
 
     final httpClient = client ?? http.Client();
 
-    // Probe candidate endpoints in order: configured URL, Wi-Fi LAN IP, Emulator host, localhost
+    // Prioritize configured cloud backend (Render) with resilient timeout for cloud cold-starts
     final candidateHosts = [
       baseUrl,
       AppConfig.apiBaseUrl,
-      'http://192.168.1.15:8000',
-      'http://10.0.2.2:8000',
-      'http://127.0.0.1:8000',
+      if (kDebugMode) ...[
+        'http://192.168.1.15:8000',
+        'http://10.0.2.2:8000',
+        'http://127.0.0.1:8000',
+      ],
     ].where((h) => h.isNotEmpty).toSet().toList();
 
     http.Response? response;
@@ -68,10 +70,10 @@ class AuthService extends ChangeNotifier {
           },
           body: jsonEncode({
             'username_or_email': usernameOrEmail.trim(),
-            'password': password,
+            'password': password.trim(),
             'portal': portal,
           }),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 25));
 
         response = res;
         baseUrl = host;

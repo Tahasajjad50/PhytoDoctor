@@ -39,7 +39,7 @@ class RealVisitRepository implements VisitRepository {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
       },
-    ).timeout(const Duration(seconds: 2));
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -112,7 +112,7 @@ class RealVisitRepository implements VisitRepository {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
       },
-    ).timeout(const Duration(seconds: 2));
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;
@@ -133,7 +133,7 @@ class RealVisitRepository implements VisitRepository {
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
       },
-    ).timeout(const Duration(seconds: 2));
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body) as Map<String, dynamic>;

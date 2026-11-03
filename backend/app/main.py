@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from sqlalchemy import text
-from app.api.v1 import admin, auth, chat, customers, employee, media, performance, targets, users, visits
+from app.api.v1 import admin, attendance, auth, chat, customers, employee, media, performance, targets, users, visits
 import app.models  # Ensure all model tables are registered in Base.metadata
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -75,6 +75,7 @@ app.include_router(employee.router, prefix=settings.API_V1_STR)
 app.include_router(media.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
 app.include_router(customers.router, prefix=settings.API_V1_STR)
+app.include_router(attendance.router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

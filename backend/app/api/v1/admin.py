@@ -6,8 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import require_admin
 from app.models.audit import AuditEvent
-from app.models.user import User
-from datetime import datetime, time, timezone
+from app.models.attendance import Attendance
 from app.models.user import User, UserRole
 from app.models.visit import FieldVisit, VisitStatus
 from app.schemas.admin import AuditEventResponse, AuditLogsListResponse
@@ -39,20 +38,34 @@ async def get_admin_dashboard_stats(
         )
     pending_count = pending_res.scalar() or 0
 
-    # 2. Active Employees Count
+    # 2. Active Employees (Clocked In on Portal Today) & Total Registered Staff
+    today_utc = datetime.now(timezone.utc).date()
     if admin_user.role == UserRole.OWNER.value:
-        emp_res = await db.execute(
-            select(func.count(User.id)).where(User.role == UserRole.EMPLOYEE.value, User.is_active == True)
+        total_emp_res = await db.execute(
+            select(func.count(User.id)).where(User.role == UserRole.EMPLOYEE.value)
         )
-    else:
-        emp_res = await db.execute(
-            select(func.count(User.id)).where(
+        active_emp_res = await db.execute(
+            select(func.count(Attendance.id)).join(User, Attendance.user_id == User.id).where(
                 User.role == UserRole.EMPLOYEE.value,
-                User.is_active == True,
-                (User.manager_id == admin_user.id) | (User.created_by_id == admin_user.id)
+                Attendance.date == today_utc,
+                Attendance.is_active == True,
             )
         )
-    active_emp_count = emp_res.scalar() or 0
+    else:
+        team_filter = (User.manager_id == admin_user.id) | (User.created_by_id == admin_user.id)
+        total_emp_res = await db.execute(
+            select(func.count(User.id)).where(User.role == UserRole.EMPLOYEE.value, team_filter)
+        )
+        active_emp_res = await db.execute(
+            select(func.count(Attendance.id)).join(User, Attendance.user_id == User.id).where(
+                User.role == UserRole.EMPLOYEE.value,
+                team_filter,
+                Attendance.date == today_utc,
+                Attendance.is_active == True,
+            )
+        )
+    total_emp_count = total_emp_res.scalar() or 0
+    active_emp_count = active_emp_res.scalar() or 0
 
     # 3. Today Field Visits & Verification Rate
     today_utc = datetime.now(timezone.utc).date()
@@ -95,6 +108,7 @@ async def get_admin_dashboard_stats(
         "admin_name": admin_user.full_name,
         "role": admin_user.role,
         "active_employees": active_emp_count,
+        "total_employees": total_emp_count,
         "today_field_visits": today_count,
         "pending_verifications": pending_count,
         "verified_visits": verified_count,
