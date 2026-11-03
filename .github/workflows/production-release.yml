@@ -40,7 +40,7 @@ jobs:
           SECRET_KEY: test_secret_key_ci_environment_verification_hs256_32bytes
           DATABASE_URL: sqlite+aiosqlite:///./test_phytodoctor.db
         run: |
-          pytest -v
+          python -m pytest -v
 
       - name: Test Database Disaster Recovery Drill
         run: |
