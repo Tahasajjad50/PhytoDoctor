@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/location_service.dart';
+import '../../core/services/native_platform_service.dart';
 import '../../core/storage/local_visit_queue.dart';
 import '../../core/storage/photo_storage_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -60,6 +62,10 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
     super.initState();
     _locationService = LocationService(accuracyThreshold: widget.accuracyThreshold);
     _repository = widget.repository ?? RealVisitRepository();
+    // Auto-prompt runtime permissions (Camera & Location) upon entering visit recording
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NativePlatformService.requestPermissions();
+    });
   }
 
   /// Retries GPS acquisition using the LocationService with accuracy threshold verification
@@ -112,7 +118,11 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (context) => const CameraCaptureScreen(),
+        builder: (context) => CameraCaptureScreen(
+          latitude: _latitude,
+          longitude: _longitude,
+          accuracy: _gpsAccuracy,
+        ),
       ),
     );
 
@@ -803,29 +813,59 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
                         Stack(
                           children: [
                             Container(
-                              height: 150,
+                              height: 180,
                               width: double.infinity,
+                              clipBehavior: Clip.antiAlias,
                               decoration: BoxDecoration(
                                 color: const Color(0xFF1E2820),
                                 borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+                                border: Border.all(color: AppTheme.cropGreen, width: 2),
                               ),
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.check_circle, color: AppTheme.cropGreen, size: 38),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      'Captured: $_photoAssetId',
-                                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  if (_capturedPhotoPath != null && File(_capturedPhotoPath!).existsSync())
+                                    Image.file(
+                                      File(_capturedPhotoPath!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  else
+                                    Center(
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.check_circle, color: AppTheme.cropGreen, size: 38),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            'Captured: $_photoAssetId',
+                                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Device Time: ${_deviceCapturedAt?.toIso8601String().substring(0, 19).replaceAll("T", " ") ?? "Just now"}',
-                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                  // Live Stamp Footer Overlay
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      color: Colors.black.withOpacity(0.75),
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.verified, color: AppTheme.cropGreen, size: 16),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              'Captured at ${_deviceCapturedAt?.toIso8601String().substring(0, 19).replaceAll("T", " ") ?? "Just now"}',
+                                              style: const TextStyle(color: Colors.white, fontSize: 11),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                             Positioned(

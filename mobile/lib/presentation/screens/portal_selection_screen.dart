@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
+import '../../core/services/native_platform_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/phyto_logo.dart';
 import 'login_screen.dart';
 
-class PortalSelectionScreen extends StatelessWidget {
+class PortalSelectionScreen extends StatefulWidget {
   const PortalSelectionScreen({Key? key}) : super(key: key);
+
+  @override
+  State<PortalSelectionScreen> createState() => _PortalSelectionScreenState();
+}
+
+class _PortalSelectionScreenState extends State<PortalSelectionScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Auto-prompt runtime permissions (Camera & Location) on app startup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NativePlatformService.requestPermissions();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/native_platform_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/mock_visit_repository.dart';
 import '../../data/repositories/real_visit_repository.dart';
@@ -55,6 +56,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     _pendingSyncCount = _syncManager.pendingCount;
     _syncManager.addListener(_onSyncManagerUpdated);
     _syncManager.initialize();
+    // Auto-prompt runtime permissions (Camera & GPS Location)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NativePlatformService.requestPermissions();
+    });
     // Non-blocking background fetch
     _loadDashboardData();
   }

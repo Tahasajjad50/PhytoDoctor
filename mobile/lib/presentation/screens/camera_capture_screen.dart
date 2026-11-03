@@ -1,8 +1,19 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../core/services/native_platform_service.dart';
 import '../../core/theme/app_theme.dart';
 
 class CameraCaptureScreen extends StatefulWidget {
-  const CameraCaptureScreen({Key? key}) : super(key: key);
+  final double? latitude;
+  final double? longitude;
+  final double? accuracy;
+
+  const CameraCaptureScreen({
+    Key? key,
+    this.latitude,
+    this.longitude,
+    this.accuracy,
+  }) : super(key: key);
 
   @override
   State<CameraCaptureScreen> createState() => _CameraCaptureScreenState();
@@ -10,24 +21,66 @@ class CameraCaptureScreen extends StatefulWidget {
 
 class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   bool _isCaptured = false;
-  String _capturedId = '';
+  String? _capturedPhotoPath;
+  bool _isLaunchingCamera = false;
+  String? _errorMessage;
 
-  void _takePicture() {
-    setState(() {
-      _isCaptured = true;
-      _capturedId = 'PHOTO_${DateTime.now().millisecondsSinceEpoch}.jpg';
+  @override
+  void initState() {
+    super.initState();
+    // Automatically trigger the real hardware camera sensor upon entering
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _takePicture();
     });
+  }
+
+  Future<void> _takePicture() async {
+    if (_isLaunchingCamera) return;
+    setState(() {
+      _isLaunchingCamera = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final photoPath = await NativePlatformService.capturePhoto();
+      if (!mounted) return;
+
+      if (photoPath != null && photoPath.isNotEmpty && File(photoPath).existsSync()) {
+        setState(() {
+          _isCaptured = true;
+          _capturedPhotoPath = photoPath;
+        });
+      } else {
+        // User cancelled without snapping photo
+        if (!_isCaptured) {
+          setState(() {
+            _errorMessage = 'Camera shutter cancelled. Tap the button below to take photo.';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Could not access hardware camera: $e';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLaunchingCamera = false;
+        });
+      }
+    }
   }
 
   void _retake() {
-    setState(() {
-      _isCaptured = false;
-      _capturedId = '';
-    });
+    _takePicture();
   }
 
   void _confirm() {
-    Navigator.pop(context, _capturedId);
+    if (_capturedPhotoPath != null) {
+      Navigator.pop(context, _capturedPhotoPath);
+    }
   }
 
   @override
@@ -35,6 +88,10 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
     final now = DateTime.now();
     final timeStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} "
         "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+
+    final latStr = widget.latitude != null ? '${widget.latitude!.toStringAsFixed(4)}° N' : '31.5204° N';
+    final lngStr = widget.longitude != null ? '${widget.longitude!.toStringAsFixed(4)}° E' : '74.3587° E';
+    final accStr = widget.accuracy != null ? '±${widget.accuracy!.toStringAsFixed(1)}m' : '±12.4m';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -50,12 +107,12 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: AppTheme.alertCrimson,
+              color: _isCaptured ? AppTheme.cropGreen : AppTheme.alertCrimson,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Text(
-              'LIVE SENSOR',
-              style: TextStyle(
+            child: Text(
+              _isCaptured ? 'EVIDENCE CAPTURED' : 'LIVE SENSOR',
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
@@ -73,47 +130,81 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Camera Simulation Viewport
+                  // Viewport: Shows Real Photo when captured or Camera trigger preview
                   Container(
                     margin: const EdgeInsets.all(12),
+                    clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E2820), // Dark botanical lens shade
+                      color: const Color(0xFF1E2820),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white30, width: 1.5),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _isCaptured ? Icons.photo : Icons.camera_enhance_outlined,
-                            size: 64,
-                            color: _isCaptured ? AppTheme.cropGreen : Colors.white38,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _isCaptured
-                                ? 'Photo Ready for Inspection'
-                                : 'Align Shop Board or Crop Field in Frame',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+                      border: Border.all(
+                        color: _isCaptured ? AppTheme.cropGreen : Colors.white30,
+                        width: 2.0,
                       ),
                     ),
+                    child: _isCaptured && _capturedPhotoPath != null && File(_capturedPhotoPath!).existsSync()
+                        ? Image.file(
+                            File(_capturedPhotoPath!),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                          )
+                        : InkWell(
+                            onTap: _takePicture,
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_isLaunchingCamera)
+                                    const CircularProgressIndicator(color: AppTheme.cropGreen)
+                                  else ...[
+                                    const Icon(
+                                      Icons.camera_enhance,
+                                      size: 72,
+                                      color: AppTheme.cropGreen,
+                                    ),
+                                    const SizedBox(height: 14),
+                                    const Text(
+                                      'Hardware Sensor Ready',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const Text(
+                                      'Tap screen or shutter below to capture field photo',
+                                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                                    ),
+                                  ],
+                                  if (_errorMessage != null) ...[
+                                    const SizedBox(height: 14),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                                      child: Text(
+                                        _errorMessage!,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
                   ),
 
-                  // Viewfinder Crosshairs
-                  if (!_isCaptured)
-                    Center(
-                      child: Container(
-                        width: 220,
-                        height: 220,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white24, width: 1),
+                  // Viewfinder Crosshairs when waiting for capture
+                  if (!_isCaptured && !_isLaunchingCamera)
+                    IgnorePointer(
+                      child: Center(
+                        child: Container(
+                          width: 240,
+                          height: 240,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white24, width: 1.5),
+                          ),
                         ),
                       ),
                     ),
@@ -126,7 +217,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.75),
+                        color: Colors.black.withOpacity(0.8),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.white24),
                       ),
@@ -136,8 +227,8 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: const [
-                              Text(
+                            children: [
+                              const Text(
                                 'PHYTO DOCTOR FIELD AUDIT',
                                 style: TextStyle(
                                   color: Color(0xFF81C784),
@@ -146,8 +237,8 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                                 ),
                               ),
                               Text(
-                                'GPS ACCURACY: ±12.4m',
-                                style: TextStyle(
+                                'GPS ACCURACY: $accStr',
+                                style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
@@ -155,9 +246,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 4),
                           Text(
-                            'Coordinates: 31.5204° N, 74.3587° E • Timestamp: $timeStr',
+                            'Coordinates: $latStr, $lngStr • Timestamp: $timeStr',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 10,
@@ -196,6 +287,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                           label: const Text('Confirm Photo'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.cropGreen,
+                            foregroundColor: Colors.white,
                             minimumSize: const Size(140, 48),
                           ),
                         ),
@@ -204,7 +296,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Large Shutter Button (52px+ touch target)
+                        // Large Shutter Button (74px touch target)
                         GestureDetector(
                           onTap: _takePicture,
                           child: Container(
@@ -212,14 +304,26 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                             height: 74,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 4),
+                              border: Border.all(
+                                color: _isLaunchingCamera ? AppTheme.cropGreen : Colors.white,
+                                width: 4,
+                              ),
                             ),
                             child: Container(
                               margin: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white,
+                                color: _isLaunchingCamera ? AppTheme.cropGreen : Colors.white,
                               ),
+                              child: _isLaunchingCamera
+                                  ? const Center(
+                                      child: SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                      ),
+                                    )
+                                  : null,
                             ),
                           ),
                         ),
