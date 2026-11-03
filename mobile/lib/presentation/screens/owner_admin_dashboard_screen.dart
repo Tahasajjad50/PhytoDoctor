@@ -319,7 +319,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                 title: 'Employee Attendance & Active Status',
                 subtitle: 'View live active roster, clock-in & clock-out timestamps for all staff',
                 badgeText: '$_activeEmployees ACTIVE',
-                badgeColor: AppTheme.verifiedGreen,
+                badgeColor: AppTheme.cropGreen,
                 onTap: () {
                   Navigator.push(
                     context,
