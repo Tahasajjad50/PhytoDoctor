@@ -1,12 +1,29 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 from sqlalchemy import text
 from app.api.v1 import admin, auth, chat, customers, employee, media, performance, targets, users, visits
 import app.models  # Ensure all model tables are registered in Base.metadata
 from app.core.config import settings
 from app.core.database import Base, engine
+
+async def _keep_alive_pinger():
+    """Background task to keep Render server awake by pinging public endpoint every 10 minutes."""
+    # Wait 60s after boot before starting pings
+    await asyncio.sleep(60)
+    target_url = "https://phytodoctor-api.onrender.com/api/v1/health"
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                res = await client.get(target_url)
+                print(f"[Keep-Alive] Ping {target_url} -> Status {res.status_code}")
+        except Exception as e:
+            print(f"[Keep-Alive] Ping notice: {e}")
+        # Ping every 10 minutes (600s). Render sleeps after 15 minutes of inactivity.
+        await asyncio.sleep(600)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,8 +36,13 @@ async def lifespan(app: FastAPI):
         await seed_data()
     except Exception as e:
         print(f"Initial seed status: {e}")
+
+    # Launch background keep-alive pinger task
+    pinger_task = asyncio.create_task(_keep_alive_pinger())
+
     yield
-    # Shutdown: Clean up database resources
+    # Shutdown: Clean up background tasks and database resources
+    pinger_task.cancel()
     await engine.dispose()
 
 app = FastAPI(
