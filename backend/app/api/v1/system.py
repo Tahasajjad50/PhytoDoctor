@@ -141,10 +141,10 @@ async def update_app_version_info(
     )
 
 @router.get("/download-apk")
-async def download_apk():
+async def download_apk(db: AsyncSession = Depends(get_db)):
     """
     Public endpoint: Downloads the latest production APK directly to the user's phone.
-    If cached on the server, serves it directly. Otherwise, redirects to the latest GitHub Release.
+    If cached on the server, serves it directly. Otherwise, redirects to the configured download URL.
     """
     if os.path.exists(APK_STORAGE_PATH) and os.path.getsize(APK_STORAGE_PATH) > 1000000:
         return FileResponse(
@@ -152,7 +152,10 @@ async def download_apk():
             filename="PhytoDoctor-release.apk",
             media_type="application/vnd.android.package-archive"
         )
-    return RedirectResponse(url=DEFAULT_GITHUB_DOWNLOAD)
+    res = await db.execute(select(AppVersionConfig).where(AppVersionConfig.id == 1))
+    config = res.scalars().first()
+    target_url = config.download_url if (config and config.download_url != "https://phytodoctor-api.onrender.com/api/v1/system/download-apk") else DEFAULT_GITHUB_DOWNLOAD
+    return RedirectResponse(url=target_url)
 
 @router.post("/upload-apk")
 async def upload_apk(
