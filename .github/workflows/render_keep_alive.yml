@@ -16,3 +16,4 @@ jobs:
           echo "Pinging PhytoDoctor Render API at $(date)..."
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://phytodoctor-api.onrender.com/api/v1/health || true)
           echo "Response code: $STATUS"
+

@@ -13,3 +13,4 @@ tests/
 *.sqlite3
 backups/
 .pytest_cache/
+

@@ -13,3 +13,4 @@ echo.
 python "%~dp0backend\scripts\keep_alive_ping.py"
 
 pause
+

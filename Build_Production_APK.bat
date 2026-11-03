@@ -49,3 +49,4 @@ echo.
 explorer "%~dp0mobile\build\app\outputs\flutter-apk"
 
 pause
+
