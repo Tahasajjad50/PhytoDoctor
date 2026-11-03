@@ -31,54 +31,64 @@ async def seed_data():
             session.add(version_config)
             await session.commit()
 
-        # 2. Seed initial users if table is empty
-        result = await session.execute(select(User))
-        existing_users = result.scalars().all()
-        if existing_users:
-            print("Database already contains user records. Skipping user seed.")
-            return
+        # 2. Seed initial core accounts idempotently
+        accounts_to_seed = [
+            User(
+                id="owner-mehmood-1",
+                full_name="Mehmood Ayyaz",
+                email="mehmoodayyaz@phytodoctor.com",
+                username="MehmoodAyyaz",
+                hashed_password=get_password_hash("Admin@PhytoDoctor"),
+                assigned_password="Admin@PhytoDoctor",
+                role=UserRole.OWNER.value,
+                is_active=True,
+            ),
+            User(
+                id="admin-taha-1",
+                full_name="Taha Sajjad",
+                email="tahasajjad@phytodoctor.com",
+                username="admin.tahasajjad",
+                hashed_password=get_password_hash("Admin12345"),
+                assigned_password="Admin12345",
+                role=UserRole.MANAGER.value,
+                phone="03106733255",
+                designation="Software Developer",
+                created_by_id="owner-mehmood-1",
+                is_active=True,
+            ),
+            User(
+                id="emp-salman-1",
+                full_name="Salman",
+                email="salman@phytodoctor.com",
+                username="emp.salman",
+                hashed_password=get_password_hash("emp.salman123"),
+                assigned_password="emp.salman123",
+                role=UserRole.EMPLOYEE.value,
+                designation="Agronomist",
+                manager_id="admin-taha-1",
+                created_by_id="admin-taha-1",
+                is_active=True,
+            ),
+            User(
+                id="emp-muneeb-1",
+                full_name="Muneeb Ur Rehman",
+                email="muneeburrehman@phytodoctor.com",
+                username="emp.muneeb",
+                hashed_password=get_password_hash("muneeb123"),
+                assigned_password="muneeb123",
+                role=UserRole.EMPLOYEE.value,
+                phone="03056814088",
+                designation="Tester",
+                manager_id="admin-taha-1",
+                created_by_id="owner-mehmood-1",
+                is_active=True,
+            ),
+        ]
 
-        mehmood = User(
-            id="owner-mehmood-1",
-            full_name="Mehmood Ayyaz",
-            email="mehmoodayyaz@phytodoctor.com",
-            username="MehmoodAyyaz",
-            hashed_password=get_password_hash("Admin@PhytoDoctor"),
-            assigned_password="Admin@PhytoDoctor",
-            role=UserRole.OWNER.value,
-            is_active=True,
-        )
-        session.add(mehmood)
-
-        admin_taha = User(
-            id="admin-taha-1",
-            full_name="Taha Sajjad",
-            email="tahasajjad@phytodoctor.com",
-            username="admin.tahasajjad",
-            hashed_password=get_password_hash("Admin12345"),
-            assigned_password="Admin12345",
-            role=UserRole.MANAGER.value,
-            phone="03106733255",
-            designation="Software Developer",
-            created_by_id=mehmood.id,
-            is_active=True,
-        )
-        session.add(admin_taha)
-
-        emp_salman = User(
-            id="emp-salman-1",
-            full_name="Salman",
-            email="salman@phytodoctor.com",
-            username="emp.salman",
-            hashed_password=get_password_hash("emp.salman123"),
-            assigned_password="emp.salman123",
-            role=UserRole.EMPLOYEE.value,
-            designation="Agronomist",
-            manager_id=admin_taha.id,
-            created_by_id=admin_taha.id,
-            is_active=True,
-        )
-        session.add(emp_salman)
+        for acc in accounts_to_seed:
+            existing = (await session.execute(select(User).where((User.username == acc.username) | (User.email == acc.email)))).scalars().first()
+            if not existing:
+                session.add(acc)
 
         await session.commit()
         print("Successfully seeded Phyto Doctor database with CEO, Admin, and Employee accounts.")
