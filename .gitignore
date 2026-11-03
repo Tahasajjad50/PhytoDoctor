@@ -97,3 +97,7 @@ Thumbs.db
 
 *.apk
 
+
+*.db
+*.db-journal
+

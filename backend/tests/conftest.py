@@ -33,6 +33,11 @@ async def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
+# Precompute password hashes once for blazing-fast test performance
+_OWNER_HASH = get_password_hash("owner123")
+_MANAGER_HASH = get_password_hash("manager123")
+_EMP_HASH = get_password_hash("emp123")
+
 @pytest_asyncio.fixture(autouse=True)
 async def setup_test_db():
     login_rate_limiter.reset()
@@ -47,7 +52,7 @@ async def setup_test_db():
                 full_name="Dr. Tariq Malik (Owner)",
                 email="owner@phytodoctor.com",
                 username="owner",
-                hashed_password=get_password_hash("owner123"),
+                hashed_password=_OWNER_HASH,
                 role=UserRole.OWNER.value,
                 is_active=True,
             ),
@@ -56,7 +61,7 @@ async def setup_test_db():
                 full_name="Farhan Qureshi (Manager)",
                 email="manager@phytodoctor.com",
                 username="manager.punjab",
-                hashed_password=get_password_hash("manager123"),
+                hashed_password=_MANAGER_HASH,
                 role=UserRole.MANAGER.value,
                 is_active=True,
                 manager_id="owner-uuid-1",
@@ -66,7 +71,7 @@ async def setup_test_db():
                 full_name="John Doe (Agronomist)",
                 email="employee@phytodoctor.com",
                 username="emp.john",
-                hashed_password=get_password_hash("emp123"),
+                hashed_password=_EMP_HASH,
                 role=UserRole.EMPLOYEE.value,
                 is_active=True,
                 manager_id="manager-uuid-2",
@@ -76,7 +81,7 @@ async def setup_test_db():
                 full_name="Inactive Officer",
                 email="inactive@phytodoctor.com",
                 username="emp.inactive",
-                hashed_password=get_password_hash("emp123"),
+                hashed_password=_EMP_HASH,
                 role=UserRole.EMPLOYEE.value,
                 is_active=False,
                 manager_id="manager-uuid-2",

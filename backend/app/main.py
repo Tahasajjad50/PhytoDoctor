@@ -37,12 +37,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Initial seed status: {e}")
 
-    # Launch background keep-alive pinger task
-    pinger_task = asyncio.create_task(_keep_alive_pinger())
+    # Launch background keep-alive pinger task in production
+    pinger_task = None
+    if settings.ENVIRONMENT != "test":
+        pinger_task = asyncio.create_task(_keep_alive_pinger())
 
     yield
     # Shutdown: Clean up background tasks and database resources
-    pinger_task.cancel()
+    if pinger_task:
+        pinger_task.cancel()
     await engine.dispose()
 
 app = FastAPI(

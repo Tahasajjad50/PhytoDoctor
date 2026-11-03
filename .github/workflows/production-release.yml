@@ -1,11 +1,10 @@
 name: Phyto Doctor Production Release & Verification CI/CD
 
 on:
-  push:
-    branches: [main, release/*]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   # ----------------------------------------------------------------------------
