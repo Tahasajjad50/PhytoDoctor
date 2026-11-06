@@ -35,6 +35,9 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
   int _verifiedVisits = 0;
   double _verificationRate = 100.0;
   double _totalSales = 0.0;
+  int _activeDailyTarget = 6;
+  int _activeMonthlySales = 500000;
+  String _activeQuotaMonth = 'October 2026';
   Timer? _refreshTimer;
 
   UserModel get user => widget.user;
@@ -43,10 +46,35 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
   void initState() {
     super.initState();
     _fetchLiveStats();
+    _fetchActiveQuotas();
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) => _fetchLiveStats());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppUpdateService.checkAndPromptUpdate(context);
     });
+  }
+
+  Future<void> _fetchActiveQuotas() async {
+    try {
+      final token = widget.user.accessToken;
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/targets/quotas');
+      final res = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (mounted && data is Map<String, dynamic>) {
+          setState(() {
+            _activeDailyTarget = (data['daily_visits'] as num?)?.toInt() ?? _activeDailyTarget;
+            _activeMonthlySales = (data['monthly_sales_pkr'] as num?)?.toInt() ?? _activeMonthlySales;
+            _activeQuotaMonth = data['month'] as String? ?? _activeQuotaMonth;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -505,7 +533,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               _AdminTile(
                 icon: Icons.flag,
                 title: 'Monthly Visit & Sales Quotas',
-                subtitle: 'Set daily visit targets (currently: 6 visits/day) and monthly sales quotas',
+                subtitle: 'Set daily visit targets (currently: $_activeDailyTarget visits/day) and monthly sales quotas',
                 onTap: () => _showTargetQuotasDialog(context),
               ),
 
@@ -1012,15 +1040,15 @@ Server Address: ${AuthService.defaultBaseUrl}
   }
 
   void _showTargetQuotasDialog(BuildContext context) {
-    final dailyVisitCtrl = TextEditingController(text: '6');
-    final monthlySalesCtrl = TextEditingController(text: '500,000');
-    final monthCtrl = TextEditingController(text: 'October 2026');
+    final dailyVisitCtrl = TextEditingController(text: '$_activeDailyTarget');
+    final monthlySalesCtrl = TextEditingController(text: '$_activeMonthlySales');
+    final monthCtrl = TextEditingController(text: _activeQuotaMonth);
     bool isSaving = false;
 
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setState) {
+        builder: (context, setDialogState) {
           return AlertDialog(
             title: Row(
               children: const [
@@ -1081,7 +1109,7 @@ Server Address: ${AuthService.defaultBaseUrl}
                 onPressed: isSaving
                     ? null
                     : () async {
-                        setState(() => isSaving = true);
+                        setDialogState(() => isSaving = true);
                         final visits = int.tryParse(dailyVisitCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 6;
                         final sales = int.tryParse(monthlySalesCtrl.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 500000;
                         final periodMonth = monthCtrl.text.trim();
@@ -1101,6 +1129,14 @@ Server Address: ${AuthService.defaultBaseUrl}
                             }),
                           );
                         } catch (_) {}
+
+                        if (mounted) {
+                          setState(() {
+                            _activeDailyTarget = visits;
+                            _activeMonthlySales = sales;
+                            _activeQuotaMonth = periodMonth;
+                          });
+                        }
 
                         Navigator.pop(dialogCtx);
                         ScaffoldMessenger.of(context).showSnackBar(

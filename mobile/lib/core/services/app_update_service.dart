@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../config/app_config.dart';
@@ -35,7 +37,23 @@ class AppUpdateService {
 
   static bool isUpdateRequired(AppVersionModel info) {
     if (!info.forceUpdate) return false;
-    return AppConfig.buildNumber < info.minRequiredBuildNumber;
+    if (AppConfig.buildNumber < info.minRequiredBuildNumber) return true;
+    if (_isVersionLower(AppConfig.appVersion, info.latestVersion)) return true;
+    return false;
+  }
+
+  static bool _isVersionLower(String current, String latest) {
+    try {
+      final cParts = current.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+      final lParts = latest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+      while (cParts.length < 3) cParts.add(0);
+      while (lParts.length < 3) lParts.add(0);
+      for (int i = 0; i < 3; i++) {
+        if (cParts[i] < lParts[i]) return true;
+        if (cParts[i] > lParts[i]) return false;
+      }
+    } catch (_) {}
+    return false;
   }
 
   /// Checks version and immediately presents a blocking, un-dismissible popup if update is required.
@@ -132,30 +150,56 @@ class AppUpdateService {
                     const SizedBox(height: 16),
                   ],
 
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final uri = Uri.parse(info.downloadUrl);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    },
-                    icon: const Icon(Icons.download, size: 20),
-                    label: const Text(
-                      'Update Now (Download APK)',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.botanicalPrimary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            try {
+                              SystemNavigator.pop();
+                              exit(0);
+                            } catch (_) {
+                              exit(0);
+                            }
+                          },
+                          icon: const Icon(Icons.close, size: 18),
+                          label: const Text('Close App'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.adminSlate,
+                            side: const BorderSide(color: AppTheme.sageBorder, width: 1.2),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final uri = Uri.parse(info.downloadUrl);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(Icons.system_update_alt, size: 18),
+                          label: const Text('Update Now'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.botanicalPrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   const Text(
-                    'Tap above to download the APK. When download finishes, tap the notification to install.',
+                    'Tap "Update Now" to download the latest APK in your browser. Tap "Close App" to exit.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 11,

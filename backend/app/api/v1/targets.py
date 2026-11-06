@@ -332,17 +332,18 @@ async def update_company_quotas(
     _COMPANY_QUOTAS["month"] = month
     _COMPANY_QUOTAS["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    # Also batch update/create targets for all active field employees for this month
+    # Also batch update/create targets for all active field employees for this period
     emp_res = await db.execute(select(User).where(User.role == UserRole.EMPLOYEE.value, User.is_active == True))
     employees = emp_res.scalars().all()
     today = date.today()
+    period_end = date(today.year, 12, 31)
     for emp in employees:
         new_target = EmployeeTarget(
             employee_id=emp.id,
             target_count=daily_visits,
             period_type=TargetPeriod.DAILY.value,
             start_date=today,
-            end_date=today,
+            end_date=period_end,
             created_by_id=current_user.id,
         )
         db.add(new_target)

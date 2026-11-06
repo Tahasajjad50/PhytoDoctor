@@ -43,15 +43,30 @@ class RealVisitRepository implements VisitRepository {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final target = data['daily_target_visits'] ?? data['target_visits'] ?? 6;
+      final completed = data['completed_today'] ?? 0;
+      final verified = data['verified_visits'] ?? 0;
+      final remaining = (target is int && verified is int)
+          ? (target - verified).clamp(0, 99)
+          : (data['remaining_visits'] ?? 0);
+      final rawTodayVisits = data['today_visits'];
+      List<Map<String, dynamic>> todayVisits = [];
+      if (rawTodayVisits is List) {
+        todayVisits = rawTodayVisits.map((e) => e as Map<String, dynamic>).toList();
+      }
+
       return {
-        'target_visits': data['daily_target_visits'] ?? 6,
-        'completed_today': data['completed_today'] ?? 0,
-        'verified_visits': data['verified_visits'] ?? 0,
-        'remaining_visits': ((data['daily_target_visits'] ?? 6) - (data['verified_visits'] ?? 0)).clamp(0, 99),
+        'target_visits': target,
+        'completed_today': completed,
+        'verified_visits': verified,
+        'pending_visits': data['pending_visits'] ?? 0,
+        'rejected_visits': data['rejected_visits'] ?? 0,
+        'remaining_visits': remaining,
         'pending_sync_count': data['pending_sync'] ?? 0,
         'progress_percentage': (data['target_progress_percentage'] as num?)?.toDouble() ?? 0.0,
         'designation': data['designation'] as String?,
         'supervisor_name': data['supervisor_name'] as String?,
+        'today_visits': todayVisits,
         'is_live_data': true,
       };
     } else {
@@ -70,10 +85,15 @@ class RealVisitRepository implements VisitRepository {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
         },
-      ).timeout(const Duration(seconds: 3));
+      ).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
-        final list = jsonDecode(response.body) as List;
-        return list.map((e) => e as Map<String, dynamic>).toList();
+        final decoded = jsonDecode(response.body);
+        if (decoded is List) {
+          return decoded.map((e) => e as Map<String, dynamic>).toList();
+        } else if (decoded is Map<String, dynamic> && decoded['items'] is List) {
+          return (decoded['items'] as List).map((e) => e as Map<String, dynamic>).toList();
+        }
+        return [];
       }
     } catch (_) {
       // If endpoint is unreachable or offline, rethrow to trigger proper offline fallback

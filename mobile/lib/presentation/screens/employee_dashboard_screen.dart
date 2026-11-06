@@ -19,6 +19,7 @@ import 'performance_screen.dart';
 import 'profile_settings_screen.dart';
 import 'record_visit_screen.dart';
 import 'visit_history_screen.dart';
+import 'employee_target_detail_screen.dart';
 
 class EmployeeDashboardScreen extends StatefulWidget {
   final UserModel user;
@@ -51,6 +52,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
   bool _isLiveData = false;
   String? _designation;
   String? _supervisorName;
+  List<Map<String, dynamic>> _todayVisits = [];
 
   // Employee Daily Attendance State
   final AttendanceService _attendanceService = AttendanceService();
@@ -193,12 +195,17 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
       if (!mounted) return;
       setState(() {
-        _todayTarget = data['target_visits'] ?? 6;
+        _todayTarget = data['target_visits'] ?? data['daily_target_visits'] ?? 6;
         _completedToday = data['completed_today'] ?? 0;
         _verifiedVisits = data['verified_visits'] ?? 0;
-        _remainingVisits = data['remaining_visits'] ?? (_todayTarget - _verifiedVisits);
+        _remainingVisits = data['remaining_visits'] ?? (_todayTarget - _verifiedVisits).clamp(0, 99);
+        final rawVisits = data['today_visits'];
+        if (rawVisits is List) {
+          _todayVisits = rawVisits.map((e) => e as Map<String, dynamic>).toList();
+        }
         _pendingSyncCount = data['pending_sync_count'] ?? _syncManager.pendingCount;
-        _progressPercentage = (data['progress_percentage'] as num?)?.toDouble() ?? 0.0;
+        _progressPercentage = (data['target_progress_percentage'] as num?)?.toDouble() ?? 
+            (_todayTarget > 0 ? (_verifiedVisits / _todayTarget * 100) : 0.0);
         _designation = data['designation'] as String?;
         _supervisorName = data['supervisor_name'] as String?;
         _isLiveData = data['is_live_data'] ?? true;
@@ -216,6 +223,24 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _navigateToTargetDetail() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EmployeeTargetDetailScreen(
+          user: widget.user,
+          repository: _repository,
+          initialTarget: _todayTarget,
+          initialCompleted: _completedToday,
+          initialVerified: _verifiedVisits,
+          initialRemaining: _remainingVisits,
+          initialTodayVisits: _todayVisits,
+        ),
+      ),
+    );
+    _loadDashboardData();
   }
 
   void _navigateToRecordVisit() async {
@@ -486,72 +511,82 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
                                 const SizedBox(height: 18),
 
-                                // Today's Quota Breakdown Card
-                                Container(
-                                  padding: const EdgeInsets.all(18),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.surfaceCard,
-                                    borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
-                                    border: Border.all(color: AppTheme.sageBorder),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          const Text(
-                                            "Today's Visit Target Progress",
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppTheme.textMain,
+                                // Today's Quota Breakdown Card (Clickable to open Target & Admin Updates breakdown)
+                                InkWell(
+                                  onTap: _navigateToTargetDetail,
+                                  borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(18),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.surfaceCard,
+                                      borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+                                      border: Border.all(color: AppTheme.sageBorder),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: const [
+                                                Text(
+                                                  "Today's Visit Target Progress",
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppTheme.textMain,
+                                                  ),
+                                                ),
+                                                SizedBox(width: 4),
+                                                Icon(Icons.chevron_right, size: 18, color: AppTheme.botanicalPrimary),
+                                              ],
                                             ),
-                                          ),
-                                          Text(
-                                            '$_verifiedVisits / $_todayTarget Visits',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppTheme.botanicalPrimary,
+                                            Text(
+                                              '$_verifiedVisits / $_todayTarget Visits',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppTheme.botanicalPrimary,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(4),
-                                        child: LinearProgressIndicator(
-                                          value: progressRatio,
-                                          minHeight: 10,
-                                          backgroundColor: AppTheme.sageLight,
-                                          valueColor:
-                                              const AlwaysStoppedAnimation<Color>(AppTheme.botanicalPrimary),
+                                          ],
                                         ),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            '${(progressRatio * 100).toStringAsFixed(0)}% Target Achieved',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: AppTheme.textMuted,
-                                              fontWeight: FontWeight.w600,
-                                            ),
+                                        const SizedBox(height: 10),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: progressRatio,
+                                            minHeight: 10,
+                                            backgroundColor: AppTheme.sageLight,
+                                            valueColor:
+                                                const AlwaysStoppedAnimation<Color>(AppTheme.botanicalPrimary),
                                           ),
-                                          Text(
-                                            '$_remainingVisits Visits Remaining',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: AppTheme.earthAmber,
-                                              fontWeight: FontWeight.w700,
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              '${(progressRatio * 100).toStringAsFixed(0)}% Target Achieved',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppTheme.textMuted,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                            Text(
+                                              '$_remainingVisits Visits Remaining',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppTheme.earthAmber,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
 
@@ -567,6 +602,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         subtitle: 'Daily Assigned Quota',
                                         accentColor: AppTheme.botanicalPrimary,
                                         icon: Icons.flag_outlined,
+                                        onTap: _navigateToTargetDetail,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -577,6 +613,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         subtitle: 'Confirmed On-Site',
                                         accentColor: AppTheme.cropGreen,
                                         icon: Icons.verified,
+                                        onTap: _navigateToTargetDetail,
                                       ),
                                     ),
                                   ],
@@ -593,6 +630,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         subtitle: 'To Complete Daily Quota',
                                         accentColor: AppTheme.earthAmber,
                                         icon: Icons.hourglass_top,
+                                        onTap: _navigateToTargetDetail,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -666,6 +704,7 @@ class _DashboardMetricCard extends StatelessWidget {
   final String subtitle;
   final Color accentColor;
   final IconData icon;
+  final VoidCallback? onTap;
 
   const _DashboardMetricCard({
     Key? key,
@@ -674,11 +713,12 @@ class _DashboardMetricCard extends StatelessWidget {
     required this.subtitle,
     required this.accentColor,
     required this.icon,
+    this.onTap,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final cardContent = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surfaceCard,
@@ -692,10 +732,20 @@ class _DashboardMetricCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Icon(icon, color: accentColor, size: 20),
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: accentColor, shape: BoxShape.circle),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onTap != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Icon(Icons.arrow_forward_ios, size: 10, color: AppTheme.textMuted.withOpacity(0.6)),
+                    ),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(color: accentColor, shape: BoxShape.circle),
+                  ),
+                ],
               ),
             ],
           ),
@@ -725,6 +775,15 @@ class _DashboardMetricCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+        child: cardContent,
+      );
+    }
+    return cardContent;
   }
 }
 
