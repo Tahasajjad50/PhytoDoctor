@@ -51,6 +51,8 @@ backend/backups/
 *.jpg
 *.jpeg
 *.html
+!mobile/assets/images/*
+!mobile/android/app/src/main/res/**/*.png
 
 # Node / Vite / Dashboard
 node_modules/
