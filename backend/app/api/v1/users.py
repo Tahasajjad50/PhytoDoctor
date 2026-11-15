@@ -5,6 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin, require_owner
+from app.core.rate_limit import login_rate_limiter
 from app.core.security import get_password_hash
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
@@ -477,6 +478,8 @@ async def reset_password(
         affected_record_type="User",
     )
     await db.commit()
+    login_rate_limiter.clear_key(user.username)
+    login_rate_limiter.clear_key(user.email)
     return MessageResponse(message=f"Password for {user.username} successfully reset.")
 
 @router.put("/{user_id}/credentials", response_model=CreatedAccountResponse)
@@ -546,6 +549,8 @@ async def update_account_credentials(
     )
     await db.commit()
     await db.refresh(target_user)
+    login_rate_limiter.clear_key(target_user.username)
+    login_rate_limiter.clear_key(target_user.email)
 
     creator_name = None
     if target_user.created_by_id:

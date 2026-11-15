@@ -23,6 +23,18 @@ router = APIRouter(prefix="/visits", tags=["Field Visits"])
 # Configurable accuracy threshold in meters
 GPS_ACCURACY_THRESHOLD_METERS = 50.0
 
+def enrich_visit_response(visit: FieldVisit, employee_name: str = "Field Agronomist") -> VisitResponse:
+    vr = VisitResponse.model_validate(visit)
+    vr.employee_name = employee_name
+    vr.officer = employee_name
+    vr.purpose = visit.notes or "Crop Health Inspection"
+    vr.distance_to_shop = "On-Site Field Visit"
+    vr.accuracy = f"{visit.gps_accuracy:.1f}m"
+    vr.timestamp = visit.device_capture_time.strftime("%b %d, %I:%M %p")
+    vr.photo_id = visit.photo_asset_id
+    vr.client_type = "CLIENT"
+    return vr
+
 @router.get("/evidence-policy", response_model=EvidencePolicyResponse)
 async def get_evidence_policy():
     """
@@ -141,7 +153,7 @@ async def create_visit(
     )
     await db.commit()
     await db.refresh(visit)
-    return VisitResponse.model_validate(visit)
+    return enrich_visit_response(visit, current_user.full_name)
 
 @router.get("", response_model=PaginatedVisitsResponse)
 @router.get("/", response_model=PaginatedVisitsResponse)
@@ -192,8 +204,16 @@ async def list_visits(
     res = await db.execute(query)
     visits = res.scalars().all()
 
+    emp_ids = list({v.employee_id for v in visits})
+    emp_map = {}
+    if emp_ids:
+        emp_res = await db.execute(select(User.id, User.full_name).where(User.id.in_(emp_ids)))
+        emp_map = {row[0]: row[1] for row in emp_res.all()}
+
+    response_items = [enrich_visit_response(v, emp_map.get(v.employee_id, "Field Agronomist")) for v in visits]
+
     return PaginatedVisitsResponse(
-        items=[VisitResponse.model_validate(v) for v in visits],
+        items=response_items,
         total=total,
         skip=skip,
         limit=limit,
@@ -213,7 +233,9 @@ async def get_visit_details(
     if current_user.role == UserRole.EMPLOYEE.value and visit.employee_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
     
-    return VisitResponse.model_validate(visit)
+    emp = await db.get(User, visit.employee_id)
+    emp_name = emp.full_name if emp else "Field Agronomist"
+    return enrich_visit_response(visit, emp_name)
 
 @router.post("/{visit_id}/verify", response_model=VisitResponse)
 async def verify_or_reject_visit(
@@ -254,4 +276,4 @@ async def verify_or_reject_visit(
     )
     await db.commit()
     await db.refresh(visit)
-    return VisitResponse.model_validate(visit)
+    return enrich_visit_response(visit, current_user.full_name)

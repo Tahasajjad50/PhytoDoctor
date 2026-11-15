@@ -239,21 +239,29 @@ async def get_employee_performance_analytics(
         )
         curr_day += timedelta(days=1)
 
-    # 4. Fetch recent reviewed/rejected/flagged visits with supervisor reasons
+    # 4. Fetch recent submissions / reviews
     recent_reviews: List[ReviewReasonItem] = []
-    for v in period_visits[:10]:
-        if v.status in (VisitStatus.REJECTED.value, VisitStatus.VERIFIED.value) or v.is_flagged_for_review:
-            recent_reviews.append(
-                ReviewReasonItem(
-                    visit_id=v.id,
-                    client_name=v.client_name,
-                    status=v.status,
-                    review_reason=v.review_reason,
-                    reviewed_at=v.reviewed_at,
-                    is_flagged=v.is_flagged_for_review,
-                    review_signals=v.review_signals,
-                )
+    for v in period_visits[:15]:
+        reason = v.review_reason
+        if not reason:
+            if v.status == VisitStatus.PENDING.value:
+                reason = "Awaiting supervisor verification"
+            elif v.status == VisitStatus.VERIFIED.value:
+                reason = "Verified on-site by supervisor"
+            else:
+                reason = "Reviewed by supervisor"
+
+        recent_reviews.append(
+            ReviewReasonItem(
+                visit_id=v.id,
+                client_name=v.client_name,
+                status=v.status,
+                review_reason=reason,
+                reviewed_at=v.reviewed_at or v.device_capture_time,
+                is_flagged=v.is_flagged_for_review,
+                review_signals=v.review_signals,
             )
+        )
 
     return PerformanceAnalyticsResponse(
         employee_id=employee.id,
@@ -296,7 +304,14 @@ async def get_team_comparison(
 
     # 1. Scope employees by role
     if current_user.role == UserRole.MANAGER.value:
-        emp_query = select(User).where(User.manager_id == current_user.id, User.is_active.is_(True))
+        emp_query = select(User).where(
+            or_(
+                User.manager_id == current_user.id,
+                User.created_by_id == current_user.id
+            ),
+            User.role == UserRole.EMPLOYEE.value,
+            User.is_active.is_(True)
+        )
     else:
         emp_query = select(User).where(User.role == UserRole.EMPLOYEE.value, User.is_active.is_(True))
 

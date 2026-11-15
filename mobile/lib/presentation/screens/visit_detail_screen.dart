@@ -26,9 +26,19 @@ class VisitDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = visit['status'] as String;
+    final status = visit['status']?.toString() ?? 'PENDING';
     final isVerified = status == 'VERIFIED';
     final isPending = status == 'PENDING';
+    final clientType = visit['client_type']?.toString() ?? 'CLIENT';
+    final clientName = visit['client_name']?.toString() ?? 'Field Visit';
+    final purpose = visit['purpose']?.toString() ?? visit['notes']?.toString() ?? 'Field Crop Inspection';
+    final timestamp = visit['timestamp']?.toString() ?? visit['device_capture_time']?.toString() ?? 'Recent';
+    final photoId = visit['photo_id']?.toString() ?? visit['photo_asset_id']?.toString() ?? 'PHOTO_PROOF.jpg';
+    final accuracy = visit['accuracy']?.toString() ?? (visit['gps_accuracy'] != null ? '${visit['gps_accuracy']}m' : '10.0m');
+    final distanceToShop = visit['distance_to_shop']?.toString() ?? 'On-Site Field Visit';
+    final notes = visit['notes']?.toString() ?? purpose;
+    final lat = (visit['latitude'] as num?)?.toDouble() ?? 31.5204;
+    final lng = (visit['longitude'] as num?)?.toDouble() ?? 74.3587;
 
     Color statusColor = isVerified
         ? AppTheme.cropGreen
@@ -60,7 +70,7 @@ class VisitDetailScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          visit['client_type'] as String,
+                          clientType,
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
@@ -88,7 +98,7 @@ class VisitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      visit['client_name'] as String,
+                      clientName,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -97,12 +107,12 @@ class VisitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Purpose: ${visit['purpose']}',
+                      'Purpose: $purpose',
                       style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Recorded: ${visit['timestamp']}',
+                      'Recorded: $timestamp',
                       style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                     ),
                   ],
@@ -148,7 +158,7 @@ class VisitDetailScreen extends StatelessWidget {
                               const Icon(Icons.photo_camera_back, size: 48, color: Colors.white54),
                               const SizedBox(height: 8),
                               Text(
-                                visit['photo_id'] as String,
+                                photoId,
                                 style: const TextStyle(color: Colors.white, fontSize: 13),
                               ),
                               const SizedBox(height: 4),
@@ -165,7 +175,7 @@ class VisitDetailScreen extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               color: Colors.black.withOpacity(0.7),
                               child: Text(
-                                'GPS ACCURACY: ±${visit['accuracy']}',
+                                'GPS ACCURACY: ±$accuracy',
                                 style: const TextStyle(
                                   color: Color(0xFF81C784),
                                   fontSize: 10,
@@ -208,7 +218,7 @@ class VisitDetailScreen extends StatelessWidget {
                       children: [
                         const Text('Distance to Client Address:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
                         Text(
-                          visit['distance_to_shop'] as String,
+                          distanceToShop,
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -231,15 +241,11 @@ class VisitDetailScreen extends StatelessWidget {
                       children: [
                         const Text('Recorded Coordinates:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
                         InkWell(
-                          onTap: () {
-                            final lat = (visit['latitude'] as num?)?.toDouble() ?? 31.5204;
-                            final lng = (visit['longitude'] as num?)?.toDouble() ?? 74.3587;
-                            _openGoogleMaps(context, lat, lng);
-                          },
+                          onTap: () => _openGoogleMaps(context, lat, lng),
                           child: Row(
                             children: [
                               Text(
-                                '${((visit['latitude'] as num?)?.toDouble() ?? 31.5204).toStringAsFixed(6)}° N, ${((visit['longitude'] as num?)?.toDouble() ?? 74.3587).toStringAsFixed(6)}° E',
+                                '${lat.toStringAsFixed(6)}° N, ${lng.toStringAsFixed(6)}° E',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
@@ -256,11 +262,7 @@ class VisitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () {
-                        final lat = (visit['latitude'] as num?)?.toDouble() ?? 31.5204;
-                        final lng = (visit['longitude'] as num?)?.toDouble() ?? 74.3587;
-                        _openGoogleMaps(context, lat, lng);
-                      },
+                      onPressed: () => _openGoogleMaps(context, lat, lng),
                       icon: const Icon(Icons.map, size: 16),
                       label: const Text('Check Location now on Google Maps'),
                       style: ElevatedButton.styleFrom(
@@ -296,7 +298,7 @@ class VisitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      visit['notes'] as String,
+                      notes,
                       style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.45),
                     ),
                   ],

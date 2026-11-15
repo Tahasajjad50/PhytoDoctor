@@ -79,7 +79,6 @@ Username: ${account.username}
 Email: ${account.email}
 Password: $password
 Phone: ${account.phone ?? 'N/A'}
-Server Address: ${AuthService.defaultBaseUrl}
 ''';
 
     Clipboard.setData(ClipboardData(text: shareText.trim()));

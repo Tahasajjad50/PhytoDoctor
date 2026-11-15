@@ -32,7 +32,11 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
   void initState() {
     super.initState();
     _loadPendingVisits();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) => _loadPendingVisits());
+    _loadTeamMembers();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _loadPendingVisits();
+      _loadTeamMembers();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppUpdateService.checkAndPromptUpdate(context);
     });
@@ -42,6 +46,35 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadTeamMembers() async {
+    try {
+      final token = widget.user.accessToken;
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/users/created-accounts');
+      final res = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 6));
+
+      if (res.statusCode == 200) {
+        final List<dynamic> items = jsonDecode(res.body);
+        final parsed = items
+            .where((item) => item['role'] == 'EMPLOYEE')
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        if (!mounted) return;
+        setState(() {
+          _teamMembers.clear();
+          _teamMembers.addAll(parsed);
+        });
+      }
+    } catch (_) {
+      // keep existing on transient network issues
+    }
   }
 
   Future<void> _loadPendingVisits() async {
@@ -309,7 +342,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                     child: const Icon(Icons.manage_accounts, color: AppTheme.adminSlate, size: 20),
                   ),
                   title: const Text('Supervised Employee Accounts', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: const Text('View & change credentials for employees created by you', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                  subtitle: const Text('View & manage credentials for supervised field team', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMuted),
                   onTap: () {
                     Navigator.push(
@@ -370,8 +403,15 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                   separatorBuilder: (context, index) => const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final audit = _pendingAudits[index];
-                    final lat = (audit['latitude'] as num).toDouble();
-                    final lng = (audit['longitude'] as num).toDouble();
+                    final lat = (audit['latitude'] as num?)?.toDouble() ?? 31.5204;
+                    final lng = (audit['longitude'] as num?)?.toDouble() ?? 74.3587;
+                    final clientName = audit['client_name']?.toString() ?? 'Field Visit';
+                    final officer = audit['officer']?.toString() ?? audit['employee_name']?.toString() ?? 'Field Agronomist';
+                    final purpose = audit['purpose']?.toString() ?? audit['notes']?.toString() ?? 'Field Crop Inspection';
+                    final timestamp = audit['timestamp']?.toString() ?? audit['device_capture_time']?.toString() ?? 'Recent';
+                    final distanceToShop = audit['distance_to_shop']?.toString() ?? 'On-Site Field Visit';
+                    final accuracy = audit['accuracy']?.toString() ?? '${(audit['gps_accuracy'] as num?)?.toStringAsFixed(1) ?? '10.0'}m';
+
                     return Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -386,18 +426,18 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                audit['client_name'] as String,
+                                clientName,
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
                               ),
                               Text(
-                                'By: ${audit['officer']}',
+                                'By: $officer',
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.botanicalPrimary),
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${audit['purpose']} • ${audit['timestamp']}',
+                            '$purpose • $timestamp',
                             style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                           ),
                           const SizedBox(height: 6),
@@ -413,7 +453,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    audit['distance_to_shop'] as String,
+                                    distanceToShop,
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.cropGreen),
                                   ),
                                 ),
@@ -443,7 +483,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          '${lat.toStringAsFixed(4)}° N, ${lng.toStringAsFixed(4)}° E (±${audit['accuracy']})',
+                                          '${lat.toStringAsFixed(4)}° N, ${lng.toStringAsFixed(4)}° E (±$accuracy)',
                                           style: const TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w800,
@@ -611,8 +651,17 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 separatorBuilder: (context, index) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final officer = _teamMembers[index];
-                  final officerLat = (officer['latitude'] as num).toDouble();
-                  final officerLng = (officer['longitude'] as num).toDouble();
+                  final name = officer['full_name']?.toString() ?? officer['name']?.toString() ?? 'Field Agronomist';
+                  final code = officer['username']?.toString() ?? officer['code']?.toString() ?? '';
+                  final phone = officer['phone']?.toString() ?? '';
+                  final designation = officer['designation']?.toString() ?? 'Field Agronomist';
+                  final isActive = officer['is_active'] == true || officer['status'] == 'Active';
+                  final statusText = isActive ? 'Active' : 'Offline';
+                  final officerLat = (officer['latitude'] as num?)?.toDouble();
+                  final officerLng = (officer['longitude'] as num?)?.toDouble();
+                  final address = officer['address']?.toString() ?? 'Assigned Territory';
+                  final lastPing = officer['last_ping']?.toString() ?? 'Registered Agronomist';
+
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
@@ -630,36 +679,91 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  officer['name'] as String,
+                                  name,
                                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain),
                                 ),
                                 const SizedBox(height: 2),
-                                Text(officer['code'] as String, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                                Text(
+                                  code.isNotEmpty ? '@$code' : designation,
+                                  style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                ),
                               ],
                             ),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  officer['today_visits'] as String,
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.botanicalPrimary),
+                                  designation,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.botanicalPrimary),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  officer['status'] as String,
-                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.cropGreen),
+                                  statusText,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: isActive ? AppTheme.cropGreen : AppTheme.textMuted,
+                                  ),
                                 ),
                               ],
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
-                        // Live location details
-                        InkWell(
-                          onTap: () => _openGoogleMaps(officerLat, officerLng),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+
+                        if (officerLat != null && officerLng != null)
+                          InkWell(
+                            onTap: () => _openGoogleMaps(officerLat, officerLng),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: AppTheme.warmOffWhite,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: AppTheme.sageBorder),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.my_location, size: 14, color: AppTheme.cropGreen),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '$address (${officerLat.toStringAsFixed(4)}°, ${officerLng.toStringAsFixed(4)}°)',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppTheme.botanicalPrimary,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                        Text(
+                                          lastPing,
+                                          style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _openGoogleMaps(officerLat, officerLng),
+                                    icon: const Icon(Icons.navigation, size: 12),
+                                    label: const Text('Check Location now', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size(0, 30),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      foregroundColor: AppTheme.botanicalPrimary,
+                                      side: const BorderSide(color: AppTheme.botanicalPrimary),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                             decoration: BoxDecoration(
                               color: AppTheme.warmOffWhite,
                               borderRadius: BorderRadius.circular(4),
@@ -667,43 +771,25 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.my_location, size: 14, color: AppTheme.cropGreen),
-                                const SizedBox(width: 6),
+                                const Icon(Icons.badge_outlined, size: 16, color: AppTheme.botanicalPrimary),
+                                const SizedBox(width: 8),
                                 Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${officer['address']} (${officerLat.toStringAsFixed(4)}°, ${officerLng.toStringAsFixed(4)}°)',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.botanicalPrimary,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                      Text(
-                                        officer['last_ping'] as String,
-                                        style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                                      ),
-                                    ],
+                                  child: Text(
+                                    phone.isNotEmpty ? 'Field Agronomist • Phone: $phone' : 'Supervised Field Agronomist',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMain),
                                   ),
                                 ),
-                                OutlinedButton.icon(
-                                  onPressed: () => _openGoogleMaps(officerLat, officerLng),
-                                  icon: const Icon(Icons.navigation, size: 12),
-                                  label: const Text('Check Location now', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(0, 30),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    foregroundColor: AppTheme.botanicalPrimary,
-                                    side: const BorderSide(color: AppTheme.botanicalPrimary),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.cropGreenLight,
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
+                                  child: const Text('Supervised', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.cropGreen)),
                                 ),
                               ],
                             ),
                           ),
-                        ),
                       ],
                     ),
                   );

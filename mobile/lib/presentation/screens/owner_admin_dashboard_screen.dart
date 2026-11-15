@@ -701,8 +701,33 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
     final emailCtrl = TextEditingController();
     final pwdCtrl = TextEditingController();
     String? selectedRole; // Intentionally NOT set by default as requested
+    String? selectedManagerId = 'admin-taha-1';
+    List<Map<String, dynamic>> availableManagers = [
+      {'id': 'admin-taha-1', 'full_name': 'Taha Sajjad', 'username': 'admin.tahasajjad'},
+    ];
     bool isSubmitting = false;
     bool obscurePassword = true;
+
+    // Pre-fetch available managers from backend
+    http.get(
+      Uri.parse('${AuthService.defaultBaseUrl}/api/v1/users/supervision/list'),
+      headers: {
+        'Accept': 'application/json',
+        if (user.accessToken != null) 'Authorization': 'Bearer ${user.accessToken}',
+      },
+    ).then((res) {
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final sups = (data['available_supervisors'] as List?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .where((s) => s['role'] == 'MANAGER')
+            .toList();
+        if (sups != null && sups.isNotEmpty) {
+          availableManagers = sups;
+          selectedManagerId ??= availableManagers.first['id'] as String?;
+        }
+      }
+    }).catchError((_) {});
 
     showDialog(
       context: context,
@@ -760,6 +785,30 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                         },
                       ),
                       const SizedBox(height: 12),
+
+                      if (selectedRole == 'EMPLOYEE') ...[
+                        DropdownButtonFormField<String>(
+                          value: selectedManagerId,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Assign Supervising Admin / Manager *',
+                            hintText: 'Select Supervising Admin',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.supervisor_account, size: 20),
+                          ),
+                          items: availableManagers.map((mgr) {
+                            return DropdownMenuItem<String>(
+                              value: mgr['id'] as String,
+                              child: Text('${mgr['full_name']} (${mgr['username']})'),
+                            );
+                          }).toList(),
+                          validator: (v) => (selectedRole == 'EMPLOYEE' && (v == null || v.isEmpty))
+                              ? 'Supervising manager is required'
+                              : null,
+                          onChanged: (val) => setState(() => selectedManagerId = val),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       TextFormField(
                         controller: nameCtrl,
@@ -884,6 +933,8 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                                 'password': accPassword,
                                 'role': chosenRole,
                                 'is_active': true,
+                                if (chosenRole == 'EMPLOYEE' && selectedManagerId != null)
+                                  'manager_id': selectedManagerId,
                               }),
                             );
                             Navigator.pop(dialogCtx);
@@ -1012,7 +1063,6 @@ Login Credentials:
 Username: $username
 Email: $email
 Password: $password
-Server Address: ${AuthService.defaultBaseUrl}
 ''';
               Clipboard.setData(ClipboardData(text: shareText));
               await NativeShareService.share(

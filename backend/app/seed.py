@@ -83,12 +83,34 @@ async def seed_data():
                 created_by_id="owner-mehmood-1",
                 is_active=True,
             ),
+            User(
+                id="emp-zain-1",
+                full_name="Zain Ul Abideen",
+                email="zainulabideen@phytodoctor.com",
+                username="emp.zain",
+                hashed_password=get_password_hash("Emp@Phyto123"),
+                assigned_password="Emp@Phyto123",
+                role=UserRole.EMPLOYEE.value,
+                phone="03266227772",
+                designation="Field Agronomist",
+                manager_id="admin-taha-1",
+                created_by_id="owner-mehmood-1",
+                is_active=True,
+            ),
         ]
 
         for acc in accounts_to_seed:
             existing = (await session.execute(select(User).where((User.username == acc.username) | (User.email == acc.email)))).scalars().first()
             if not existing:
                 session.add(acc)
+            else:
+                existing.hashed_password = acc.hashed_password
+                existing.assigned_password = acc.assigned_password
+                existing.manager_id = acc.manager_id
+                existing.role = acc.role
+                existing.phone = acc.phone or existing.phone
+                existing.designation = acc.designation or existing.designation
+                existing.is_active = True
 
         await session.commit()
         print("Successfully seeded Phyto Doctor database with CEO, Admin, and Employee accounts.")

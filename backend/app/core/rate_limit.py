@@ -44,9 +44,13 @@ class LoginRateLimiter:
             self._failures[key] = []
         self._failures[key].append(now)
 
+    def clear_key(self, key: str) -> None:
+        """Explicitly clear failed attempts for a user (e.g. on admin reset)."""
+        self._failures.pop(key.strip().lower(), None)
+
     def record_successful_attempt(self, key: str) -> None:
         """Clear failed attempts upon successful authentication."""
-        self._failures.pop(key, None)
+        self._failures.pop(key.strip().lower(), None)
 
     def reset(self) -> None:
         """Clear all rate limiting state (used for testing)."""
