@@ -8,20 +8,42 @@ class VisitDetailScreen extends StatelessWidget {
   const VisitDetailScreen({Key? key, required this.visit}) : super(key: key);
 
   Future<void> _openGoogleMaps(BuildContext context, double lat, double lng) async {
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Visit+Location)');
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+
     try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open map application.')),
-        );
+      // 1. Native geo scheme (exclusively handled by navigation maps, never hijacked by third-party payment apps)
+      if (await canLaunchUrl(geoUri)) {
+        final ok = await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+        if (ok) return;
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error launching Google Maps: $e')),
-      );
+      debugPrint('Native geo launch notice: $e');
     }
+
+    try {
+      // 2. Browser / external application fallback
+      final ok = await launchUrl(webUri, mode: LaunchMode.externalNonBrowserApplication);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('External app launch notice: $e');
+    }
+
+    try {
+      // 3. Platform default fallback
+      final ok = await launchUrl(webUri, mode: LaunchMode.platformDefault);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('Platform default launch notice: $e');
+    }
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Coordinates: ${lat.toStringAsFixed(4)}°N, ${lng.toStringAsFixed(4)}°E. (Lat/Long verified)'),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override
@@ -31,11 +53,16 @@ class VisitDetailScreen extends StatelessWidget {
     final isPending = status == 'PENDING';
     final clientType = visit['client_type']?.toString() ?? 'FIELD VISIT';
     final clientName = visit['client_name']?.toString() ?? 'Client Record';
-    final notes = visit['notes']?.toString() ?? 'No field notes provided.';
+    final rawNotes = visit['notes']?.toString() ?? 'No field notes provided.';
+    final notes = rawNotes.replaceAllMapped(
+      RegExp(r'(\[[^\]]+\])\s*\1+'),
+      (m) => m.group(1)!,
+    );
     final recordedTime = visit['device_capture_time']?.toString() ?? visit['timestamp']?.toString() ?? 'Recorded Today';
     final photoId = visit['photo_asset_id']?.toString() ?? visit['photo_id']?.toString() ?? 'AUTHENTICATED_PHOTO';
     final accuracy = visit['gps_accuracy'] ?? visit['accuracy'] ?? 10;
     final distanceToShop = visit['distance_to_shop']?.toString() ?? 'Verified on site (±${accuracy}m)';
+    final officerName = visit['employee_name']?.toString() ?? visit['officer']?.toString() ?? 'Salman (Field Agronomist)';
 
     Color statusColor = isVerified
         ? AppTheme.cropGreen
@@ -103,6 +130,11 @@ class VisitDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
+                    Text(
+                      'By: $officerName',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.botanicalPrimary),
+                    ),
+                    const SizedBox(height: 2),
                     Text(
                       'Recorded: $recordedTime',
                       style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),

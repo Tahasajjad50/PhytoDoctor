@@ -210,9 +210,12 @@ class LocalVisitModel {
       'id': id, // UUID idempotency key
       'client_name': clientName,
       'client_phone': clientPhone,
-      'notes': notes != null && notes!.isNotEmpty
-          ? '[$clientType - $visitPurpose] $notes'
-          : '[$clientType - $visitPurpose]',
+      'notes': () {
+        final prefix = '[$clientType - $visitPurpose]';
+        if (notes == null || notes!.trim().isEmpty) return prefix;
+        final clean = notes!.trim();
+        return clean.startsWith(prefix) ? clean : '$prefix $clean';
+      }(),
       'latitude': latitude,
       'longitude': longitude,
       'gps_accuracy': gpsAccuracy,

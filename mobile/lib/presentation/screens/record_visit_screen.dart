@@ -5,6 +5,7 @@ import '../../core/services/location_service.dart';
 import '../../core/services/native_platform_service.dart';
 import '../../core/storage/local_visit_queue.dart';
 import '../../core/storage/photo_storage_service.dart';
+import '../../core/sync/offline_sync_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/real_visit_repository.dart';
 import '../../data/repositories/visit_repository.dart';
@@ -435,7 +436,7 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
       'client_phone': _clientPhone.isNotEmpty ? _clientPhone : null,
       'client_type': _selectedClientType,
       'visit_purpose': _visitPurpose,
-      'notes': _notes.isNotEmpty ? '[$_selectedClientType - $_visitPurpose] $_notes' : '[$_selectedClientType - $_visitPurpose]',
+      'notes': _notes.trim(),
       'latitude': _latitude,
       'longitude': _longitude,
       'gps_accuracy': _gpsAccuracy,
@@ -446,17 +447,21 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
       'photo_url': null,
     };
 
-    // 9. Save locally to SQLite offline queue immediately (Guarantee no data loss)
+    // 9. Save locally to SQLite offline queue immediately (Guarantees zero data loss)
     await _localQueue.enqueueVisit(visitPayload);
 
-    // 10. Attempt immediate sync with backend if online
+    // 10. Attempt immediate direct sync with backend & Cloudinary if online
     bool syncedToServer = false;
     try {
       final token = widget.user.accessToken ?? '';
-      syncedToServer = await _repository.recordVisit(
-        token: token,
-        visitData: visitPayload,
-      );
+      if (token.isNotEmpty) {
+        final syncedCount = await OfflineSyncManager().syncNow(
+          repository: _repository,
+          token: token,
+          forceRetryAll: true,
+        );
+        syncedToServer = syncedCount > 0;
+      }
     } catch (_) {
       syncedToServer = false;
     }
@@ -468,14 +473,14 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
     if (syncedToServer) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Field visit verified and uploaded to server!'),
+          content: Text('Field visit verified and uploaded to server directly!'),
           backgroundColor: AppTheme.cropGreen,
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Visit saved locally in offline queue. Will sync automatically when online.'),
+          content: Text('Visit saved locally in offline queue. Auto-sync will upload when online.'),
           backgroundColor: AppTheme.earthAmber,
           duration: Duration(seconds: 4),
         ),

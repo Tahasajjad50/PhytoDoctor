@@ -213,6 +213,19 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         _isOffline = false;
         _errorMessage = null;
       });
+
+      // Automatic background sync: upload any pending offline visits without requiring manual button tap
+      if (_syncManager.pendingCount > 0 && !_syncManager.isSyncing) {
+        _syncManager.syncNow(
+          repository: _repository,
+          token: token,
+          forceRetryAll: true,
+        ).then((synced) {
+          if (synced > 0 && mounted) {
+            _loadDashboardData();
+          }
+        });
+      }
     } catch (e) {
       // Instant graceful offline fallback: keep cached metrics & update sync count from SQLite
       if (!mounted) return;
@@ -253,6 +266,9 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
 
     if (result == true) {
       _loadDashboardData();
+      if (_syncManager.pendingCount > 0 && !_syncManager.isSyncing) {
+        _triggerManualSync();
+      }
     }
   }
 

@@ -31,7 +31,7 @@ async def get_admin_dashboard_stats(
             select(func.count(FieldVisit.id)).where(FieldVisit.status == VisitStatus.PENDING.value)
         )
     else:
-        team_subquery = select(User.id).where(User.manager_id == admin_user.id)
+        team_subquery = select(User.id).where((User.manager_id == admin_user.id) | (User.created_by_id == admin_user.id))
         pending_res = await db.execute(
             select(func.count(FieldVisit.id)).where(
                 FieldVisit.status == VisitStatus.PENDING.value,
@@ -81,7 +81,7 @@ async def get_admin_dashboard_stats(
         )
         total_res = await db.execute(select(func.count(FieldVisit.id)))
     else:
-        team_subquery = select(User.id).where(User.manager_id == admin_user.id)
+        team_subquery = select(User.id).where((User.manager_id == admin_user.id) | (User.created_by_id == admin_user.id))
         today_res = await db.execute(
             select(func.count(FieldVisit.id)).where(
                 FieldVisit.device_capture_time >= today_start,

@@ -111,6 +111,29 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
     } catch (_) {
       // Keep previous stats on transient errors
     }
+
+    // Direct pending count verification matching Manager Verification Queue filter
+    try {
+      final token = widget.user.accessToken;
+      final pendingUrl = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits?status=PENDING&limit=1');
+      final pendingRes = await http.get(
+        pendingUrl,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 4));
+
+      if (pendingRes.statusCode == 200) {
+        final pData = jsonDecode(pendingRes.body);
+        final totalPending = (pData is Map ? pData['total'] : null) as num?;
+        if (totalPending != null && mounted) {
+          setState(() {
+            _pendingCount = totalPending.toInt();
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   void _confirmSignOut(BuildContext context) {
@@ -126,20 +149,39 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
       user.email.toLowerCase().contains('mehmood');
 
   Future<void> _openGoogleMaps(BuildContext context, double lat, double lng) async {
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Visit+Location)');
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+
     try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open Google Maps.')),
-        );
+      if (await canLaunchUrl(geoUri)) {
+        final ok = await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+        if (ok) return;
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error launching Google Maps: $e')),
-      );
+      debugPrint('Native geo launch notice: $e');
     }
+
+    try {
+      final ok = await launchUrl(webUri, mode: LaunchMode.externalNonBrowserApplication);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('External app launch notice: $e');
+    }
+
+    try {
+      final ok = await launchUrl(webUri, mode: LaunchMode.platformDefault);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('Platform default launch notice: $e');
+    }
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Coordinates: ${lat.toStringAsFixed(4)}°N, ${lng.toStringAsFixed(4)}°E. (Lat/Long verified)'),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override

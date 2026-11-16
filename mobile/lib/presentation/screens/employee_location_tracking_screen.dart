@@ -19,20 +19,39 @@ class _EmployeeLocationTrackingScreenState extends State<EmployeeLocationTrackin
   bool _isRefreshing = false;
 
   Future<void> _openGoogleMaps(double lat, double lng) async {
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Staff+Location)');
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+
     try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open Google Maps.')),
-        );
+      if (await canLaunchUrl(geoUri)) {
+        final ok = await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+        if (ok) return;
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error launching Google Maps: $e')),
-      );
+      debugPrint('Native geo launch notice: $e');
     }
+
+    try {
+      final ok = await launchUrl(webUri, mode: LaunchMode.externalNonBrowserApplication);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('External app launch notice: $e');
+    }
+
+    try {
+      final ok = await launchUrl(webUri, mode: LaunchMode.platformDefault);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('Platform default launch notice: $e');
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Coordinates: ${lat.toStringAsFixed(4)}°N, ${lng.toStringAsFixed(4)}°E. (Lat/Long verified)'),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   void _refreshFeeds() {

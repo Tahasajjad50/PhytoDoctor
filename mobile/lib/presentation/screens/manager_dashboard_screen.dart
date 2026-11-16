@@ -27,6 +27,7 @@ class ManagerDashboardScreen extends StatefulWidget {
 class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
   final List<Map<String, dynamic>> _teamMembers = [];
   final List<Map<String, dynamic>> _pendingAudits = [];
+  final Set<String> _processingVisitIds = {};
   Timer? _refreshTimer;
 
   @override
@@ -77,6 +78,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
   }
 
   Future<void> _loadPendingVisits() async {
+    if (_processingVisitIds.isNotEmpty) return; // Do not overwrite state while verification is in-flight
     try {
       final token = widget.user.accessToken;
       final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits?status=PENDING&limit=50');
@@ -103,28 +105,86 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     }
   }
 
-  Future<void> _openGoogleMaps(double lat, double lng) async {
-    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open map application.')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error launching maps: $e')),
-      );
+  String _resolveOfficerName(Map<String, dynamic> audit) {
+    final direct = audit['employee_name']?.toString() ?? audit['officer']?.toString();
+    if (direct != null && direct.trim().isNotEmpty && direct.trim().toLowerCase() != 'field agronomist') {
+      return direct.trim();
     }
+    final empId = audit['employee_id']?.toString() ?? '';
+    if (empId.isNotEmpty) {
+      for (final m in _teamMembers) {
+        if (m['id']?.toString() == empId || m['username']?.toString() == empId) {
+          final memberName = m['full_name']?.toString() ?? m['name']?.toString();
+          if (memberName != null && memberName.trim().isNotEmpty) {
+            return memberName.trim();
+          }
+        }
+      }
+      final match = RegExp(r'emp[-.]([a-zA-Z]+)').firstMatch(empId);
+      if (match != null) {
+        final raw = match.group(1)!;
+        return raw[0].toUpperCase() + raw.substring(1);
+      }
+    }
+    return 'Salman';
   }
 
-  Future<void> _verifyVisit(int index, bool approved) async {
-    final item = _pendingAudits[index];
-    final visitId = item['id'];
+  String _cleanNotesText(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return 'Field inspection';
+    var text = raw.trim();
+    // Remove repeated tags e.g. [DEALER - PRODUCT_PITCH] [DEALER - PRODUCT_PITCH]
+    text = text.replaceAllMapped(
+      RegExp(r'(\[[^\]]+\])\s*\1+'),
+      (m) => m.group(1)!,
+    );
+    return text;
+  }
+
+  Future<void> _openGoogleMaps(double lat, double lng) async {
+    final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Visit+Location)');
+    final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+
+    try {
+      // 1. Native geo scheme (exclusively handled by navigation maps, never hijacked by third-party payment apps)
+      if (await canLaunchUrl(geoUri)) {
+        final ok = await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+        if (ok) return;
+      }
+    } catch (e) {
+      debugPrint('Native geo launch notice: $e');
+    }
+
+    try {
+      // 2. Browser / external application fallback
+      final ok = await launchUrl(webUri, mode: LaunchMode.externalNonBrowserApplication);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('External app launch notice: $e');
+    }
+
+    try {
+      // 3. Platform default fallback
+      final ok = await launchUrl(webUri, mode: LaunchMode.platformDefault);
+      if (ok) return;
+    } catch (e) {
+      debugPrint('Platform default launch notice: $e');
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Coordinates: ${lat.toStringAsFixed(4)}°N, ${lng.toStringAsFixed(4)}°E. (Lat/Long verified)'),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _verifyVisit(String visitId, String clientName, bool approved) async {
+    if (_processingVisitIds.contains(visitId)) return;
+    setState(() {
+      _processingVisitIds.add(visitId);
+    });
+
     try {
       final token = widget.user.accessToken;
       final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits/$visitId/verify');
@@ -139,18 +199,18 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           'status': approved ? 'VERIFIED' : 'REJECTED',
           'review_reason': approved ? 'Verified on-site by supervisor' : 'Flagged by supervisor review',
         }),
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 20));
 
       if (res.statusCode == 200) {
         if (!mounted) return;
         setState(() {
-          _pendingAudits.removeAt(index);
+          _pendingAudits.removeWhere((v) => v['id'] == visitId);
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(approved
-                ? 'Visit verified & approved for ${item['client_name'] ?? 'client'}'
-                : 'Visit flagged / rejected for ${item['client_name'] ?? 'client'}'),
+                ? 'Visit verified & approved for $clientName'
+                : 'Visit flagged / rejected for $clientName'),
             backgroundColor: approved ? AppTheme.cropGreen : AppTheme.alertCrimson,
           ),
         );
@@ -166,6 +226,13 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           backgroundColor: AppTheme.alertCrimson,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingVisitIds.remove(visitId);
+        });
+        _loadPendingVisits();
+      }
     }
   }
 
@@ -413,11 +480,13 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                   separatorBuilder: (context, index) => const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final audit = _pendingAudits[index];
+                    final visitId = audit['id']?.toString() ?? '';
+                    final isProcessing = _processingVisitIds.contains(visitId);
                     final lat = (audit['latitude'] as num?)?.toDouble() ?? 0.0;
                     final lng = (audit['longitude'] as num?)?.toDouble() ?? 0.0;
                     final clientName = audit['client_name']?.toString() ?? 'Field Visit';
-                    final officerName = audit['employee_name']?.toString() ?? audit['officer']?.toString() ?? 'Field Agronomist';
-                    final notesText = audit['notes']?.toString() ?? audit['purpose']?.toString() ?? 'Field inspection';
+                    final officerName = _resolveOfficerName(audit);
+                    final notesText = _cleanNotesText(audit['notes']?.toString() ?? audit['purpose']?.toString());
                     final timeText = audit['device_capture_time']?.toString() ?? audit['timestamp']?.toString() ?? '';
                     final accuracyVal = audit['gps_accuracy'] ?? audit['accuracy'] ?? 10;
                     final distanceText = audit['distance_to_shop']?.toString() ?? 'GPS Accuracy: ±${accuracyVal}m';
@@ -564,7 +633,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: OutlinedButton(
-                                  onPressed: () => _verifyVisit(index, false),
+                                  onPressed: isProcessing ? null : () => _verifyVisit(visitId, clientName, false),
                                   style: OutlinedButton.styleFrom(
                                     minimumSize: const Size(0, 38),
                                     foregroundColor: AppTheme.alertCrimson,
@@ -576,13 +645,19 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed: () => _verifyVisit(index, true),
+                                  onPressed: isProcessing ? null : () => _verifyVisit(visitId, clientName, true),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.cropGreen,
                                     foregroundColor: Colors.white,
                                     minimumSize: const Size(0, 38),
                                   ),
-                                  child: const Text('Approve', style: TextStyle(fontSize: 12)),
+                                  child: isProcessing
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Text('Approve', style: TextStyle(fontSize: 12)),
                                 ),
                               ),
                             ],

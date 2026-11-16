@@ -219,6 +219,7 @@ async def list_visits(
     for v_obj, emp_name in rows:
         v_resp = VisitResponse.model_validate(v_obj)
         v_resp.employee_name = emp_name or "Field Agronomist"
+        v_resp.officer = emp_name or "Field Agronomist"
         items.append(v_resp)
 
     return PaginatedVisitsResponse(
@@ -234,15 +235,23 @@ async def get_visit_details(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    res = await db.execute(select(FieldVisit).where(FieldVisit.id == visit_id))
-    visit = res.scalar_one_or_none()
-    if not visit:
+    res = await db.execute(
+        select(FieldVisit, User.full_name.label("employee_name"))
+        .outerjoin(User, FieldVisit.employee_id == User.id)
+        .where(FieldVisit.id == visit_id)
+    )
+    row = res.first()
+    if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visit record not found.")
+    visit, emp_name = row
 
     if current_user.role == UserRole.EMPLOYEE.value and visit.employee_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
     
-    return VisitResponse.model_validate(visit)
+    v_resp = VisitResponse.model_validate(visit)
+    v_resp.employee_name = emp_name or "Field Agronomist"
+    v_resp.officer = emp_name or "Field Agronomist"
+    return v_resp
 
 @router.post("/{visit_id}/verify", response_model=VisitResponse)
 async def verify_or_reject_visit(
@@ -283,4 +292,8 @@ async def verify_or_reject_visit(
     )
     await db.commit()
     await db.refresh(visit)
-    return VisitResponse.model_validate(visit)
+    v_resp = VisitResponse.model_validate(visit)
+    emp = await db.get(User, visit.employee_id)
+    v_resp.employee_name = emp.full_name if emp else "Field Agronomist"
+    v_resp.officer = emp.full_name if emp else "Field Agronomist"
+    return v_resp

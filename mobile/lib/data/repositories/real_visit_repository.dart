@@ -115,7 +115,7 @@ class RealVisitRepository implements VisitRepository {
         'Content-Type': 'application/json',
       },
       body: jsonEncode(visitData),
-    ).timeout(const Duration(seconds: 3));
+    ).timeout(const Duration(seconds: 25));
     return response.statusCode == 200 || response.statusCode == 201;
   }
 

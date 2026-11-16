@@ -22,7 +22,7 @@ echo [1/2] Building optimized Release APK pointing to: %RENDER_URL% ...
 echo.
 
 cd /d "%~dp0mobile"
-call flutter build apk --release --dart-define=API_URL=%RENDER_URL%
+call flutter build apk --release --dart-define=API_URL=%RENDER_URL% --android-skip-build-dependency-validation
 
 if %errorlevel% neq 0 (
     echo.
