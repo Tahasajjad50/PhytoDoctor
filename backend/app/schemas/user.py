@@ -34,6 +34,7 @@ class UserResponse(BaseModel):
     phone: Optional[str] = None
     designation: Optional[str] = None
     manager_id: Optional[str] = None
+    must_change_password: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -55,12 +56,23 @@ class CreatedAccountResponse(BaseModel):
     phone: Optional[str] = None
     designation: Optional[str] = None
     manager_id: Optional[str] = None
+    must_change_password: bool = False
     created_at: datetime
     created_by_id: Optional[str] = None
     created_by_name: Optional[str] = None
     login_password: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class AdminPasswordResetResponse(BaseModel):
+    user_id: str
+    username: str
+    full_name: str
+    temporary_password: str
+    must_change_password: bool = True
+    reset_at: datetime
+    reset_by: str
+    message: str = "One-time temporary password generated. Provide this credential to the user."
 
 class UpdateCredentialsRequest(BaseModel):
     username: Optional[str] = None

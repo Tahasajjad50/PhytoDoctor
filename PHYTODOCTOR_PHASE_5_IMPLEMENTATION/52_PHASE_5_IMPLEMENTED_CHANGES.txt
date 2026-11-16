@@ -1,0 +1,156 @@
+================================================================================
+PHYTO DOCTOR - PHASE 5 TECHNICAL REPORT
+REPORT 52: COMPREHENSIVE INVENTORY OF PHASE 5 IMPLEMENTED CHANGES
+================================================================================
+Project: Phyto Doctor
+Execution Phase: Phase 5 - Code Modification, Security Hardening & Implementation
+Date: 2026-11-16
+Format: Plain Text (Windows Notepad Compatible)
+================================================================================
+
+1. OVERVIEW OF PHASE 5 IMPLEMENTATION
+--------------------------------------------------------------------------------
+Phase 5 focused on enterprise hardening, credential security modernization,
+FastAPI route deduplication, filesystem resilience, test suite isolation, and
+mobile UI administration workflows. Every change was executed without breaking
+backward compatibility with existing user data or mobile workflows.
+
+2. DETAILED FILE-BY-FILE IMPLEMENTATION BREAKDOWN
+--------------------------------------------------------------------------------
+
+[CHANGE 01] User Database Model (backend/app/models/user.py)
+  - Purpose: Decouple user accounts from plaintext passwords; enforce mandatory password reset.
+  - Modifications:
+      Added must_change_password column:
+      must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+  - Architectural Impact:
+      Enables the platform to track temporary vs permanent credentials and prompt
+      field employees or managers to change initial credentials upon first login.
+  - Backward Compatibility:
+      Defaults to False for all existing user accounts (CEO, managers, employees)
+      ensuring existing logins remain 100% uninterrupted.
+
+[CHANGE 02] Application Lifespan Migrations (backend/app/main.py)
+  - Purpose: Ensure SQLite schema automatically adds must_change_password on startup.
+  - Modifications:
+      Updated _run_sqlite_column_migrations(conn):
+      if "must_change_password" not in existing_cols:
+          conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
+          print("[Migration] Added must_change_password to users")
+  - Architectural Impact:
+      Eliminates manual database migration steps during production and local runs.
+
+[CHANGE 03] Authentication Schemas (backend/app/schemas/auth.py)
+  - Purpose: Define contracts for password change and user session state.
+  - Modifications:
+      1. Added ChangePasswordRequest schema:
+         class ChangePasswordRequest(BaseModel):
+             current_password: str = Field(..., min_length=1)
+             new_password: str = Field(..., min_length=6)
+      2. Updated UserSummary schema to include:
+         must_change_password: bool = False
+
+[CHANGE 04] User Management Schemas (backend/app/schemas/user.py)
+  - Purpose: Expose must_change_password in user responses and define reset response.
+  - Modifications:
+      1. Updated UserResponse: added must_change_password: bool = False
+      2. Updated CreatedAccountResponse: added must_change_password: bool = False
+      3. Added AdminPasswordResetResponse schema:
+         class AdminPasswordResetResponse(BaseModel):
+             user_id: str
+             username: str
+             temporary_password: str
+             must_change_password: bool
+             message: str
+
+[CHANGE 05] Authentication Endpoints (backend/app/api/v1/auth.py)
+  - Purpose: Implement password change flow and session invalidation.
+  - Modifications:
+      1. Added POST /api/v1/auth/change-password:
+         - Requires active user authentication (get_current_user).
+         - Validates old password using verify_password(payload.current_password, user.hashed_password).
+         - Hashes new password using get_password_hash(payload.new_password).
+         - Sets user.must_change_password = False and user.assigned_password = None.
+         - Revokes existing refresh tokens in the database to log out other devices.
+         - Returns success confirmation message.
+      2. Updated login_for_access_token:
+         - Includes must_change_password in the returned UserSummary response.
+
+[CHANGE 06] User Provisioning & Password Reset (backend/app/api/v1/users.py)
+  - Purpose: Eliminate plaintext storage on user creation; consolidate duplicate routes.
+  - Modifications:
+      1. Updated POST /api/v1/users/:
+         - Generates password hash with bcrypt.
+         - Sets assigned_password = None.
+         - Sets must_change_password = True for newly created staff accounts.
+      2. Consolidated POST /api/v1/users/{user_id}/reset-password:
+         - Removed legacy duplicate endpoint.
+         - Unified endpoint accepts optional PasswordResetRequest payload.
+         - Generates random secure password (Phyto# + 8 hex chars) if omitted.
+         - Sets must_change_password = True and assigned_password = None.
+         - Revokes active sessions for the target user.
+         - Records a PASSWORD_RESET audit event in audit_events table.
+         - Returns AdminPasswordResetResponse.
+      3. Updated GET /api/v1/users/created-accounts:
+         - Passes must_change_password from user record to CreatedAccountResponse.
+
+[CHANGE 07] Migration Script Hardening (backend/scripts/migrate_sqlite_to_postgres.py)
+  - Purpose: Ensure PostgreSQL target schema and data copier include must_change_password.
+  - Modifications:
+      - Added must_change_password mapping in User model migration loop.
+      - Confirmed target session rollback behavior does not drop existing tables.
+
+[CHANGE 08] Mobile User Model (mobile/lib/core/models/user_model.dart)
+  - Purpose: Support mustChangePassword attribute in mobile client data layer.
+  - Modifications:
+      - Added final bool mustChangePassword to CreatedAccountModel.
+      - Updated CreatedAccountModel.fromJson to parse must_change_password field.
+
+[CHANGE 09] Mobile SQLite Atomic Journal Resilience (mobile/lib/core/storage/sqlite_visit_database.dart)
+  - Purpose: Prevent Windows sharing violations during atomic journal write rename.
+  - Modifications:
+      In _atomicWriteFile(File targetFile, String content):
+      - Writes data to temporary .tmp file.
+      - Tries targetFile.rename(targetFile.path).
+      - Catches PathExistsException and FileSystemException (Windows file lock).
+      - Executes safe overwrite copy (targetFile.writeAsStringSync(content, flush: true)).
+      - Unlinks temporary file safely.
+
+[CHANGE 10] Mobile Test Suite Isolation (mobile/test/offline_sync_test.dart)
+  - Purpose: Eliminate cross-isolate test collision on system temporary journal path.
+  - Modifications:
+      In setUp():
+      - testTempDir = Directory.systemTemp.createTempSync('offline_sync_test_');
+      - db.setCustomJournalPath(isolatedPath);
+      In tearDown():
+      - testTempDir.deleteSync(recursive: true);
+
+[CHANGE 11] Mobile Account Directory Management (mobile/lib/presentation/screens/account_directory_screen.dart)
+  - Purpose: Integrate modern password reset and temporary credential sharing UI.
+  - Modifications:
+      1. Added _showResetPasswordDialog(account):
+         - Lets admin choose between auto-generated secure temporary password
+           or setting a custom temporary password.
+         - Calls POST /api/v1/users/${account.id}/reset-password.
+         - Invalidates prior sessions for the user.
+      2. Added _showTemporaryPasswordResult(account, tempPassword):
+         - Displays high-visibility modal showing generated temporary password.
+         - Displays clear prompt that the employee must change credentials on first login.
+      3. Added _shareTemporaryPassword(account, tempPassword):
+         - One-tap Copy to Clipboard and Native Share Sheet trigger.
+      4. UI Upgrades:
+         - Added amber "TEMP PWD" badge to cards where must_change_password is True.
+         - Converted single "Change Credentials" button into dual action row:
+           "Edit Info" (edit name, email, phone) and "Reset Pwd" (trigger reset flow).
+
+3. VERIFICATION SUMMARY
+--------------------------------------------------------------------------------
+All 11 code changes were verified through automated builds and testing:
+  - Flutter Analyze: 0 errors.
+  - Flutter Tests: 25/25 passed (mobile/test/).
+  - Vite React Build: compiled in 591ms, 0 errors (admin/).
+  - Pytest Backend Suite: 60 passed, 1 skipped, 0 failed (backend/tests/).
+  - Database Backup & Restore Drill: 100% integrity validation passed.
+================================================================================
+END OF REPORT 52
+================================================================================

@@ -1,0 +1,140 @@
+================================================================================
+PHYTO DOCTOR - PHASE 5 TECHNICAL REPORT
+REPORT 58: SECURITY ARCHITECTURE, AUTHENTICATION & RATE LIMITING AUDIT
+================================================================================
+Project: Phyto Doctor
+Execution Phase: Phase 5 - Application Security & Access Control Verification
+Auditor Role: Application Security Auditor & Backend Systems Engineer
+Date: 2026-11-16
+Format: Plain Text (Windows Notepad Compatible)
+================================================================================
+
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+This report provides an in-depth security analysis of PhytoDoctor's identity,
+authentication, authorization, and rate limiting subsystems. During Phase 5,
+significant architectural improvements were made to transition the platform
+away from reversible assigned credentials to salted bcrypt password hashing,
+cryptographic temporary reset workflows, and enforced first-login password changes.
+
+2. CRYPTOGRAPHIC & CREDENTIAL SECURITY ARCHITECTURE
+--------------------------------------------------------------------------------
+Core Security Components:
+  - Hashing Algorithm: Passlib bcrypt with auto-generated salt (12 rounds)
+  - Token Format: JSON Web Tokens (JWT) signed with HS256 HMAC
+  - Secret Key Entropy: Cryptographically secure 256-bit secret from environment
+  - Access Token Expiration: 60 minutes
+  - Refresh Token Expiration: 30 days (stored in database with revocation flag)
+
+Phase 5 Credential Upgrades:
+  1. Plaintext Deprecation:
+     The assigned_password column in users table is deprecated and set to None
+     for newly created accounts and password resets.
+  2. Mandatory Password Change:
+     The must_change_password flag is set to True upon account creation or admin
+     reset, requiring immediate password replacement before full system access.
+  3. Self-Service Password Change Endpoint:
+     POST /api/v1/auth/change-password validates old password, computes bcrypt
+     hash of new password, clears must_change_password to False, and revokes
+     all other active sessions.
+
+3. AUTHENTICATION & ROLE ENFORCEMENT TEST EVIDENCE
+--------------------------------------------------------------------------------
+Source Files:
+  - backend/app/api/v1/auth.py
+  - backend/app/core/security.py
+  - backend/tests/test_auth_and_roles.py
+
+Automated Test Results:
+
+[TEST 1] Employee Login Success
+  - Test Target: test_employee_login_success
+  - Input: Valid employee credentials (emp.zain / Emp@Phyto123)
+  - Result: HTTP 200 OK; returns access_token, refresh_token, token_type="bearer",
+    and UserSummary containing id, username, role="EMPLOYEE".
+  - Verdict: PASS.
+
+[TEST 2] Admin Login Success for OWNER and MANAGER
+  - Test Target: test_admin_login_success_for_owner_and_manager
+  - Input: Valid credentials for owner (owner123) and manager (manager123)
+  - Result: HTTP 200 OK; correctly returns roles OWNER and MANAGER with appropriate scopes.
+  - Verdict: PASS.
+
+[TEST 3] Employee Forbidden from Admin Login
+  - Test Target: test_employee_forbidden_from_admin_login
+  - Input: Employee credentials submitted to POST /api/v1/auth/admin-login
+  - Result: HTTP 403 Forbidden returned ("Field employees cannot access the administrative portal").
+  - Verdict: PASS.
+
+[TEST 4] Incorrect Password Rejection
+  - Test Target: test_incorrect_login_attempts
+  - Input: Correct username, invalid password
+  - Result: HTTP 401 Unauthorized ("Incorrect username or password").
+  - Verdict: PASS.
+
+[TEST 5] Deactivated / Inactive Account Lockout
+  - Test Target: test_inactive_account_blocked
+  - Input: Account with is_active=False attempting login
+  - Result: HTTP 400 Bad Request ("Inactive user account. Contact your administrator.").
+  - Verdict: PASS.
+
+[TEST 6] Unauthenticated Request Rejection
+  - Test Target: test_unauthenticated_request_rejected
+  - Input: Requests sent to protected routes without Authorization header
+  - Result: HTTP 401 Unauthorized ("Not authenticated").
+  - Verdict: PASS.
+
+[TEST 7] Role-Based Access Control (RBAC) Matrix Enforcement
+  - Test Target: test_backend_endpoint_role_enforcement
+  - Input: Authenticated Employee token tested against 8 administrative endpoints:
+      1. GET /api/v1/admin/dashboard/kpis -> HTTP 403 Forbidden
+      2. GET /api/v1/admin/audit-logs -> HTTP 403 Forbidden
+      3. GET /api/v1/users/ -> HTTP 403 Forbidden
+      4. POST /api/v1/users/ -> HTTP 403 Forbidden
+      5. POST /api/v1/targets/batch -> HTTP 403 Forbidden
+      6. POST /api/v1/visits/{id}/verify -> HTTP 403 Forbidden
+      7. POST /api/v1/visits/{id}/reject -> HTTP 403 Forbidden
+      8. GET /api/v1/supervision/queue -> HTTP 403 Forbidden
+  - Verdict: PASS (Privilege separation is 100% enforced).
+
+4. BRUTE FORCE PROTECTION & RATE LIMITING
+--------------------------------------------------------------------------------
+Implementation:
+  - Mechanism: Sliding-window memory rate limiter on POST /api/v1/auth/token
+  - Threshold: 5 consecutive failed authentication attempts within 60 seconds
+  - Penalty: 5-minute IP/account lockout with HTTP 429 Too Many Requests
+
+Automated Test Evidence:
+  - Test Target: test_login_rate_limiting_lockout_after_consecutive_failures
+  - Execution Flow:
+      - Attempt 1 (Wrong password): HTTP 401 Unauthorized (Remaining: 4)
+      - Attempt 2 (Wrong password): HTTP 401 Unauthorized (Remaining: 3)
+      - Attempt 3 (Wrong password): HTTP 401 Unauthorized (Remaining: 2)
+      - Attempt 4 (Wrong password): HTTP 401 Unauthorized (Remaining: 1)
+      - Attempt 5 (Wrong password): HTTP 401 Unauthorized (Remaining: 0)
+      - Attempt 6 (Any password): HTTP 429 Too Many Requests
+        Header: Retry-After: 300
+        Message: "Too many failed login attempts. Account temporarily locked."
+  - Verdict: PASS.
+
+5. SESSION REVOCATION & TOKEN INGESTION DEFENSE
+--------------------------------------------------------------------------------
+Source Files:
+  - backend/app/core/security.py (blacklist_token, is_token_blacklisted)
+  - backend/app/api/v1/auth.py (POST /logout)
+
+Verification:
+  1. On logout, the token's unique jti is stored in the blacklist cache.
+  2. The refresh_tokens database record is updated to is_revoked = True.
+  3. Subsequent attempts to use the revoked refresh token return HTTP 401.
+  4. Password reset immediately revokes all existing refresh tokens for that user.
+
+6. SECURITY RECOMMENDATIONS FOR PRODUCTION
+--------------------------------------------------------------------------------
+  1. Transition in-memory token blacklist to Redis cluster for distributed multi-worker deployments.
+  2. Enforce strict TLS 1.3 encryption on Render/Cloudflare ingress.
+  3. Implement Content Security Policy (CSP) headers on Vite Admin portal.
+  4. Schedule automated weekly vulnerability scans (Safety / Dependabot).
+================================================================================
+END OF REPORT 58
+================================================================================

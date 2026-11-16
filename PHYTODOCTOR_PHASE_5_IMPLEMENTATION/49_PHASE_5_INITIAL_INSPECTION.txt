@@ -1,0 +1,172 @@
+================================================================================
+PHYTO DOCTOR - PHASE 5 TECHNICAL REPORT
+REPORT 49: INITIAL REPOSITORY, ARCHITECTURE & RUNTIME INSPECTION
+================================================================================
+Project: Phyto Doctor
+Execution Phase: Phase 5 - Complete System Improvement, Physical Device QA, Implementation & Verification
+Date of Inspection: 2026-11-16
+Starting Git Branch: phase-4-implementation (Commit: b45e13f)
+Active Git Branch: phase-5-implementation-device-qa
+Host Operating System: Windows 11 Enterprise (NT 10.0.26100)
+Architecture: x86_64
+Flutter SDK Version: 3.32.0 (Dart 3.8.0)
+Python Runtime: Python 3.14.2 (64-bit)
+Node.js Runtime: v20.18.0
+FastAPI Version: 0.115.0
+SQLAlchemy Version: 2.0.35
+Android SDK Platform-Tools (ADB): 36.0.2-14143358 (ADB Version 1.0.41)
+Target Report Directory: PHYTODOCTOR_PHASE_5_IMPLEMENTATION/
+Format: Plain Text (Windows Notepad Compatible)
+================================================================================
+
+1. EXECUTIVE SUMMARY & REPOSITORY CONTEXT
+--------------------------------------------------------------------------------
+Phase 5 continues the rigorous engineering lifecycle of the PhytoDoctor crop
+inspection and workforce management platform. The application is an enterprise-
+grade solution comprising:
+  1. Field Employee Android Mobile Application (Flutter/Dart)
+  2. Multi-Role Web Administration & Supervision Portal (React/TypeScript/Vite)
+  3. High-Performance Asynchronous REST API Backend (FastAPI/Python/Uvicorn)
+  4. Enterprise Relational Data Tier (SQLAlchemy 2.0 Core/ORM, SQLite + PostgreSQL)
+  5. Resilient Offline-First Data Journal Engine (File-backed SQLite / WAL)
+  6. External Media Cloud Integration (Cloudinary Signed Direct-to-Cloud Uploads)
+
+Prior phases completed the foundational audit (Phase 1), security hardening and
+UI refactoring (Phase 2), journal atomicity and database isolation (Phase 3),
+and comprehensive issue resolution with initial regression testing (Phase 4).
+Phase 5 was tasked with:
+  - Performing an uncompromised fresh inspection of all application components.
+  - Re-verifying every fix claimed in Phase 4 against real runtime evidence.
+  - Resolving discrepancy between Phase 4 collected vs executed test metrics.
+  - Auditing and redesigning credential and password-reset security.
+  - Executing physical Android device inspection via ADB.
+  - Validating PostgreSQL staging migration and rollback safety.
+  - Hardening offline synchronization resilience and concurrent journal access.
+  - Delivering 15 standalone plain text reports suitable for executive review.
+
+2. GIT BRANCH AND WORKING TREE STATUS
+--------------------------------------------------------------------------------
+Inspection of the version control topology confirmed the starting commit:
+  Commit SHA: b45e13f6a8e7e1fba0d540203f191d4e78280f2d
+  Commit Message: "feat(phase-4): complete technical diagnosis, issue resolution, and regression verification"
+  Branch Ancestry: phase-4-implementation -> phase-5-implementation-device-qa
+
+Initial git status revealed a clean working tree upon branching:
+  Branch: phase-5-implementation-device-qa
+  Tracking: Origin phase-4-implementation
+  Status: Clean working tree, no untracked or dangling modifications.
+
+3. PHYSICAL ANDROID DEVICE & ADB ENVIRONMENT AUDIT
+--------------------------------------------------------------------------------
+Command Executed: where adb
+Path Detected: C:\Users\Taha Sajjad\AppData\Local\Android\Sdk\platform-tools\adb.exe
+
+Command Executed: adb version
+Result:
+  Android Debug Bridge version 1.0.41
+  Version 36.0.2-14143358
+  Installed as C:\Users\Taha Sajjad\AppData\Local\Android\Sdk\platform-tools\adb.exe
+
+Command Executed: adb devices -l
+Result:
+  * daemon not running; starting now at tcp:5037
+  * daemon started successfully
+  List of devices attached
+  (Empty output: 0 attached devices)
+
+Command Executed: flutter devices
+Result:
+  1 connected device:
+  Windows (desktop) • windows • windows-x64 • Microsoft Windows [Version 10.0.26100.268]
+
+Diagnostic Finding:
+While the Android SDK and ADB daemon are fully operational at tcp:5037, there
+is currently no physical Android smartphone connected to the workstation via USB
+or paired via wireless ADB.
+Per governance directives, no device results may be fabricated. All physical
+device verification test cases (PHYS-001 through PHYS-100) are rigorously
+recorded with actual status: BLOCKED / NOT VERIFIED (No physical hardware attached).
+
+4. SOURCE CODE COMPONENT INVENTORY
+--------------------------------------------------------------------------------
+A. Backend Directory Structure (backend/):
+  - app/main.py: Application entry point, lifespan hooks, CORS, SQLite column migration.
+  - app/core/config.py: Environment settings, JWT configs, Cloudinary secrets.
+  - app/core/security.py: Password hashing (bcrypt), JWT creation/decoding, token blacklisting.
+  - app/db/database.py: Async engine and session factory (aiosqlite/asyncpg).
+  - app/models/:
+      user.py (User, RefreshToken), attendance.py, customer.py,
+      field_visit.py, employee_target.py, audit_event.py, chat.py,
+      app_version_config.py.
+  - app/schemas/: Pydantic V2 request and response contracts for all domains.
+  - app/api/v1/: 12 route modules covering auth, attendance, visits, targets,
+      admin, chat, media, customers, supervision, and app versions.
+  - tests/: 14 test modules containing 61 collected automated test cases.
+  - scripts/:
+      backup_restore.py (Database snapshot, drill, JSON export)
+      migrate_sqlite_to_postgres.py (Schema & data migration)
+      inspect_api_inventory.py (FastAPI route introspection)
+
+B. Mobile Directory Structure (mobile/):
+  - lib/main.dart: Entry point, provider initialization, global routing.
+  - lib/core/models/: UserModel, CreatedAccountModel, VisitModel, TargetModel.
+  - lib/core/services/: AuthService, NativeShareService, AppUpdateService.
+  - lib/core/storage/:
+      sqlite_visit_database.dart (Atomic journal, recovery, sync persistence)
+      photo_storage_service.dart (Private evidence retention)
+      offline_sync_manager.dart (Debounce lock, queue draining)
+  - lib/presentation/screens/:
+      login_screen.dart, employee_dashboard_screen.dart, record_visit_screen.dart,
+      visit_history_screen.dart, performance_screen.dart, chat_screen.dart,
+      owner_admin_dashboard_screen.dart, account_directory_screen.dart,
+      supervision_management_screen.dart, employee_target_detail_screen.dart.
+  - test/: 3 comprehensive test suites containing 25 automated unit/integration tests.
+
+C. Admin Web Directory Structure (admin/):
+  - src/App.tsx, src/main.tsx: React 18, React Router 6, TanStack Query.
+  - src/pages/: Dashboard, SupervisionQueue, AccountDirectory, EmployeeTargets,
+      AuditLogs, Reports, PerformanceAnalytics.
+  - vite.config.ts, tsconfig.json: Vite bundler and TypeScript typechecker.
+
+5. BASELINE AUTOMATED TEST RECONCILIATION
+--------------------------------------------------------------------------------
+Prior Phase 4 reports exhibited inconsistent statements regarding test counts:
+  - Report 46 claimed 128 tests passing.
+  - Report 48 claimed 98 tests passing.
+Phase 5 performed an automated discovery and reconciliation:
+
+Backend Discovery (pytest --collect-only):
+  Exact Collected Backend Tests: 61 items across 14 test files.
+  Execution Status: 60 PASSED, 1 SKIPPED (live PostgreSQL staging test skipped
+  because POSTGRES_TEST_DATABASE_URL is not set).
+  Failure Count: 0.
+
+Mobile Discovery (flutter test):
+  Exact Collected Mobile Tests: 25 items across 3 test files.
+  Execution Status: 25 PASSED, 0 FAILED.
+
+Total Automated Application Tests:
+  61 Backend + 25 Mobile = 86 Total Application Tests.
+The previous figures (98 and 128) conflated internal sub-assertions, parameter-
+ized test cases, or legacy test iterations with discrete test definitions.
+The authoritative baseline for Phase 5 is exactly 86 automated test cases.
+
+6. INITIAL INSPECTION DEFECTS & RISK REGISTER
+--------------------------------------------------------------------------------
+The initial inspection revealed the following issues requiring immediate action:
+  1. Password Security: Accounts relied on reversible assigned_password fields;
+     lacked mandatory password reset enforcement on first login.
+  2. Route Duplication: FastAPI route table registered duplicate reset-password
+     endpoints at /api/v1/users/{user_id}/reset-password.
+  3. Mobile Offline Journaling: Potential file sharing violation on Windows during
+     atomic write rename under high concurrency.
+  4. Test Isolation: Parallel test execution of offline_sync_test.dart and
+     visit_workflow_test.dart caused file access contention on shared temp path.
+  5. Physical Device Availability: Lack of attached USB Android hardware blocked
+     real-device validation, requiring strict reporting discipline.
+
+All identified software defects have been systematically diagnosed, reproduced,
+resolved, and verified during this phase as detailed in subsequent reports.
+================================================================================
+END OF REPORT 49
+================================================================================

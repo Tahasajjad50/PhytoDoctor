@@ -73,9 +73,12 @@ void main() {
   late OfflineSyncManager syncManager;
   late PhotoStorageService photoStorage;
   late MockOfflineVisitRepo mockRepo;
+  late Directory testTempDir;
 
   setUp(() async {
+    testTempDir = Directory.systemTemp.createTempSync('offline_sync_test_');
     db = SqliteVisitDatabase();
+    db.setCustomJournalPath('${testTempDir.path}/phytodoctor_visits_disk_journal.json');
     await db.clearAll();
     await db.initDatabase();
 
@@ -83,6 +86,14 @@ void main() {
     await syncManager.initialize();
     photoStorage = PhotoStorageService();
     mockRepo = MockOfflineVisitRepo();
+  });
+
+  tearDown(() {
+    try {
+      if (testTempDir.existsSync()) {
+        testTempDir.deleteSync(recursive: true);
+      }
+    } catch (_) {}
   });
 
   group('Offline-First Synchronization Scenarios', () {

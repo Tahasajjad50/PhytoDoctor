@@ -118,6 +118,7 @@ def run_migration(source_url: str, target_url: str, dry_run: bool = False):
                     manager_id=None,
                     created_by_id=None,
                     assigned_password=u.assigned_password,
+                    must_change_password=getattr(u, "must_change_password", False),
                     created_at=u.created_at,
                     updated_at=u.updated_at,
                 ))

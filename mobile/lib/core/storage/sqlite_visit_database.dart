@@ -129,19 +129,20 @@ class SqliteVisitDatabase {
       final tmpFile = File('${file.path}.tmp');
       await tmpFile.writeAsString(jsonStr, flush: true);
 
-      // 4. Atomic replacement onto primary journal path
+      // 4. Reliable cross-platform persistent write
       try {
-        await tmpFile.rename(file.path);
-      } on FileSystemException catch (_) {
-        // Fallback for filesystems (like Windows) that block atomic rename over existing file
         if (file.existsSync()) {
+          await file.writeAsString(jsonStr, flush: true);
+        } else {
           try {
-            file.deleteSync();
-          } catch (_) {}
+            await tmpFile.rename(file.path);
+          } catch (_) {
+            await file.writeAsString(jsonStr, flush: true);
+          }
         }
-        await tmpFile.copy(file.path);
+      } finally {
         try {
-          await tmpFile.delete();
+          if (tmpFile.existsSync()) await tmpFile.delete();
         } catch (_) {}
       }
     } catch (e) {

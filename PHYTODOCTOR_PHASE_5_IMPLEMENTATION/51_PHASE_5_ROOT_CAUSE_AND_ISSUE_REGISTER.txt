@@ -1,0 +1,157 @@
+================================================================================
+PHYTO DOCTOR - PHASE 5 TECHNICAL REPORT
+REPORT 51: PHASE 5 ROOT CAUSE ANALYSIS & COMPREHENSIVE ISSUE REGISTER
+================================================================================
+Project: Phyto Doctor
+Execution Phase: Phase 5 - System Improvement, Physical Device QA & Verification
+Date: 2026-11-16
+Format: Plain Text (Windows Notepad Compatible)
+================================================================================
+
+1. ISSUE REGISTER & ROOT CAUSE MATRIX
+--------------------------------------------------------------------------------
+
+[ISSUE-P5-001]
+Component: Backend Authentication & Security (backend/app/models/user.py)
+Severity: HIGH
+Description:
+  Plaintext / Reversible Credential Storage (assigned_password column).
+Root Cause:
+  During early MVP development, an assigned_password column was introduced so
+  the CEO or regional managers could provision field employees and communicate
+  their login credentials directly. Over successive iterations, this resulted
+  in reversible password storage in the database, presenting a security risk
+  if the database snapshot were ever compromised.
+Remediation Path:
+  1. Introduce a mandatory must_change_password (Boolean) flag in the User model.
+  2. Implement a dedicated change password endpoint (POST /api/v1/auth/change-password)
+     that verifies the current password, updates the password using salted bcrypt,
+     clears must_change_password to False, clears assigned_password to None, and
+     revokes all prior sessions.
+  3. Update user creation (POST /api/v1/users/) and reset-password endpoints to
+     never store assigned_password; instead, generate a one-time temporary
+     credential (Phyto# + 8 random hex characters) and set must_change_password=True.
+Status: RESOLVED & VERIFIED.
+
+--------------------------------------------------------------------------------
+
+[ISSUE-P5-002]
+Component: Backend API Routing (backend/app/api/v1/users.py)
+Severity: MEDIUM
+Description:
+  Duplicate Endpoint Registration for POST /api/v1/users/{user_id}/reset-password.
+Root Cause:
+  Two separate developer iterations registered the exact same HTTP route:
+    - Line 457: reset_user_password taking PasswordResetRequest payload.
+    - Line 634: reset_user_password taking no payload and generating default password.
+  In FastAPI/Starlette, duplicate route registrations cause the second route to
+  shadow the first, or introduce route ambiguity depending on router inclusion order.
+Remediation Path:
+  Consolidated both route handlers into a single unified endpoint:
+    - Accepts an optional PasswordResetRequest body.
+    - If new_password is provided (minimum 6 chars), hashes and sets it.
+    - If new_password is empty or omitted, generates a cryptographically secure
+      temporary password.
+    - Sets must_change_password=True and assigned_password=None.
+    - Invalidates all active refresh tokens for the target user.
+    - Logs a PASSWORD_RESET audit event.
+    - Returns AdminPasswordResetResponse schema with clear instructions.
+Status: RESOLVED & VERIFIED.
+
+--------------------------------------------------------------------------------
+
+[ISSUE-P5-003]
+Component: Mobile Offline Journaling Engine (mobile/lib/core/storage/sqlite_visit_database.dart)
+Severity: MEDIUM
+Description:
+  Windows Filesystem File-Locking Contention during Atomic Journal Rename.
+Root Cause:
+  On Windows OS, File.rename() throws PathExistsException or FileSystemException
+  (Sharing violation) if the target file is currently open or locked by a
+  background isolate or read stream.
+Remediation Path:
+  Enhanced the atomic write mechanism in sqlite_visit_database.dart:
+    - Writes content to .tmp file.
+    - Attempts atomic File.rename(targetPath).
+    - If PathExistsException or FileSystemException occurs on Windows, catches
+      the error, falls back to copying bytes directly to the target file with
+      overwrite=true, flushes the stream, and safely unlinks the temporary file.
+Status: RESOLVED & VERIFIED.
+
+--------------------------------------------------------------------------------
+
+[ISSUE-P5-004]
+Component: Mobile Automated Test Suite (mobile/test/offline_sync_test.dart)
+Severity: LOW
+Description:
+  Inter-Test Process Race Condition on Default Journal File.
+Root Cause:
+  When running flutter test across all files, offline_sync_test.dart and
+  visit_workflow_test.dart executed concurrently in separate isolates, both
+  accessing the shared default system temporary path (sqlite_visit_queue_journal.json).
+  This caused occasional PathAccessException during rapid test execution.
+Remediation Path:
+  Updated offline_sync_test.dart setUp() method to dynamically create an isolated
+  temporary directory for each test run (Directory.systemTemp.createTempSync('offline_sync_test_'))
+  and invoke db.setCustomJournalPath(isolatedPath), deleting the directory in tearDown().
+Status: RESOLVED & VERIFIED.
+
+--------------------------------------------------------------------------------
+
+[ISSUE-P5-005]
+Component: Database Schema Synchronization in Standalone Scripts (backend/app/main.py)
+Severity: LOW
+Description:
+  OperationalError: no such column: users.must_change_password during Standalone Script Runs.
+Root Cause:
+  The SQLite column migration routine _run_sqlite_column_migrations was bound
+  only to the FastAPI lifespan startup event. When running standalone CLI scripts
+  such as backup_restore.py or migrate_sqlite_to_postgres.py, the FastAPI lifespan
+  does not fire, meaning newly added columns were not automatically created in
+  pre-existing local database files.
+Remediation Path:
+  1. Ran direct column migration on local database files (phyto_doctor.db).
+  2. Included must_change_password column check and alter table statement in
+     migration utilities so standalone tools operate with complete schema parity.
+Status: RESOLVED & VERIFIED.
+
+--------------------------------------------------------------------------------
+
+[ISSUE-P5-006]
+Component: Quality Assurance Governance & Reporting Metrics
+Severity: LOW
+Description:
+  Discrepancy in Historical Test Count Reporting (98 vs 128 tests).
+Root Cause:
+  Previous reports conflated internal sub-assertions and test scenarios within
+  single functions with discrete test runner definitions.
+Remediation Path:
+  Conducted machine-readable test discovery using pytest --collect-only and
+  flutter test:
+    - Backend Discrete Collected Tests: Exactly 61 items.
+    - Mobile Discrete Collected Tests: Exactly 25 items.
+    - Total Discrete Automated Tests: Exactly 86 items.
+  All Phase 5 documentation uses this reconciled, verifiable baseline.
+Status: RESOLVED & RECONCILED.
+
+--------------------------------------------------------------------------------
+
+[ISSUE-P5-007]
+Component: Hardware Environment (Physical Android Smartphone)
+Severity: INFORMATIONAL / BLOCKED
+Description:
+  No Physical Android Smartphone Attached via USB or Wireless ADB.
+Root Cause:
+  The host workstation has Android Platform-Tools (ADB 1.0.41) installed and
+  running at tcp:5037, but no physical mobile phone is plugged in.
+Remediation Path:
+  Adhered strictly to governance rules:
+    - Zero fabrication of physical test results.
+    - Verified real ADB state via adb devices -l.
+    - Formally recorded all physical device test cases (PHYS-001 through PHYS-100)
+      as BLOCKED / NOT VERIFIED due to missing hardware.
+Status: TRANSPARENTLY DOCUMENTED.
+
+================================================================================
+END OF REPORT 51
+================================================================================

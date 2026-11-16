@@ -36,6 +36,7 @@ class User(Base):
         index=True
     )
     assigned_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -9,12 +9,14 @@ from app.core.rate_limit import login_rate_limiter
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
+    get_password_hash,
     hash_refresh_token,
     verify_password,
 )
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     LogoutRequest,
     MessageResponse,
@@ -235,3 +237,46 @@ async def logout(
 @router.get("/me", response_model=UserSummary)
 async def get_my_profile(current_user: User = Depends(get_current_user)):
     return UserSummary.model_validate(current_user)
+
+@router.post("/change-password", response_model=MessageResponse)
+async def change_password(
+    req: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Allows authenticated users to change their password.
+    Clears must_change_password flag, revokes previous refresh tokens,
+    and removes recoverable assigned_password ciphertext.
+    """
+    if not verify_password(req.old_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password verification failed."
+        )
+
+    if req.old_password == req.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password."
+        )
+
+    current_user.hashed_password = get_password_hash(req.new_password)
+    current_user.must_change_password = False
+    current_user.assigned_password = None
+
+    # Invalidate existing refresh tokens
+    token_query = select(RefreshToken).where(RefreshToken.user_id == current_user.id)
+    tokens_res = await db.execute(token_query)
+    for tok in tokens_res.scalars().all():
+        tok.is_revoked = True
+
+    await log_audit_event(
+        db=db,
+        action="PASSWORD_CHANGED",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        metadata={"user_id": current_user.id, "username": current_user.username},
+    )
+    await db.commit()
+    return MessageResponse(message="Password changed successfully.")

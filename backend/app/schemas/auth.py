@@ -18,6 +18,7 @@ class UserSummary(BaseModel):
     role: str
     is_active: bool
     manager_id: Optional[str] = None
+    must_change_password: bool = False
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -31,6 +32,10 @@ class TokenResponse(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: Optional[str] = Field(None, description="Optional refresh token to revoke")
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=4, max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=128)
 
 class MessageResponse(BaseModel):
     message: str

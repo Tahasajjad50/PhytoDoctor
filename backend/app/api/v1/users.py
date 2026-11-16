@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import secrets
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
@@ -10,6 +11,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
 from app.schemas.auth import MessageResponse
 from app.schemas.user import (
+    AdminPasswordResetResponse,
     CreatedAccountResponse,
     EmployeeSupervisionItem,
     PaginatedUsersResponse,
@@ -70,7 +72,8 @@ async def create_user(
         role=user_in.role.upper(),
         manager_id=manager_id,
         created_by_id=current_user.id,
-        assigned_password=encrypt_credential(user_in.password),
+        assigned_password=None,
+        must_change_password=True,
         is_active=user_in.is_active,
         phone=user_in.phone,
         designation=user_in.designation,
@@ -186,6 +189,7 @@ async def list_created_accounts(
                 created_by_id=user_obj.created_by_id,
                 created_by_name=creator_name or ("Executive Office (CEO)" if user_obj.created_by_id else "System Root"),
                 login_password="••••••••",
+                must_change_password=getattr(user_obj, "must_change_password", False),
             )
         )
     return items
@@ -451,19 +455,37 @@ async def deactivate_user(
     await db.commit()
     return MessageResponse(message=f"Account for {user.username} has been deactivated.")
 
-@router.post("/{user_id}/reset-password", response_model=MessageResponse)
+@router.post("/{user_id}/reset-password", response_model=AdminPasswordResetResponse)
 async def reset_password(
     user_id: str,
-    req: PasswordResetRequest,
+    req: Optional[PasswordResetRequest] = None,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Preferred modern security architecture: Secure password reset.
+    Accepts custom new_password or generates a cryptographically random temporary password.
+    Hashes it into hashed_password, sets must_change_password = True, and clears assigned_password.
+    Strictly scoped: OWNER can reset any user; MANAGER can only reset supervised employees.
+    """
     res = await db.execute(select(User).where(User.id == user_id))
     user = res.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    user.hashed_password = get_password_hash(req.new_password)
+    if current_user.role == UserRole.MANAGER.value:
+        is_supervisor = user.manager_id == current_user.id
+        is_creator = user.created_by_id == current_user.id
+        if not (is_supervisor or is_creator):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You are not authorized to reset credentials for this user."
+            )
+
+    temp_pwd = req.new_password if (req and req.new_password) else ("Phyto#" + secrets.token_hex(4).upper())
+    user.hashed_password = get_password_hash(temp_pwd)
+    user.assigned_password = None
+    user.must_change_password = True
 
     # Invalidate all existing refresh tokens
     token_query = select(RefreshToken).where(RefreshToken.user_id == user.id)
@@ -471,6 +493,7 @@ async def reset_password(
     for tok in tokens_res.scalars().all():
         tok.is_revoked = True
 
+    now_utc = datetime.now(timezone.utc)
     await log_audit_event(
         db=db,
         action="PASSWORD_RESET",
@@ -478,9 +501,23 @@ async def reset_password(
         actor_role=current_user.role,
         affected_record_id=user.id,
         affected_record_type="User",
+        metadata={
+            "reset_user_id": user.id,
+            "reset_username": user.username,
+            "reset_by_username": current_user.username,
+        },
     )
     await db.commit()
-    return MessageResponse(message=f"Password for {user.username} successfully reset.")
+    return AdminPasswordResetResponse(
+        user_id=user.id,
+        username=user.username,
+        full_name=user.full_name,
+        temporary_password=temp_pwd,
+        must_change_password=True,
+        reset_at=now_utc,
+        reset_by=current_user.username,
+        message=f"Password for {user.username} successfully reset.",
+    )
 
 @router.put("/{user_id}/credentials", response_model=CreatedAccountResponse)
 async def update_account_credentials(
@@ -530,7 +567,8 @@ async def update_account_credentials(
 
     if req.password:
         target_user.hashed_password = get_password_hash(req.password)
-        target_user.assigned_password = encrypt_credential(req.password)
+        target_user.assigned_password = None
+        target_user.must_change_password = True
 
         # Invalidate active refresh tokens
         token_query = select(RefreshToken).where(RefreshToken.user_id == target_user.id)

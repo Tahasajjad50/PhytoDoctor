@@ -69,6 +69,7 @@ class CreatedAccountModel {
   final String? createdById;
   final String? createdByName;
   final String? loginPassword;
+  final bool mustChangePassword;
 
   CreatedAccountModel({
     required this.id,
@@ -84,6 +85,7 @@ class CreatedAccountModel {
     this.createdById,
     this.createdByName,
     this.loginPassword,
+    this.mustChangePassword = false,
   });
 
   bool get isEmployee => role.toUpperCase() == 'EMPLOYEE';
@@ -105,6 +107,7 @@ class CreatedAccountModel {
       createdById: json['created_by_id'] as String?,
       createdByName: json['created_by_name'] as String?,
       loginPassword: json['login_password'] as String?,
+      mustChangePassword: json['must_change_password'] as bool? ?? false,
     );
   }
 }

@@ -345,6 +345,236 @@ Phone: ${account.phone ?? 'N/A'}
     );
   }
 
+  void _showResetPasswordDialog(CreatedAccountModel account) {
+    final customPwdCtrl = TextEditingController();
+    bool isSubmitting = false;
+    bool autoGenerate = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.alertCrimson.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.lock_reset, color: AppTheme.alertCrimson, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Reset User Password',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Issue a temporary credential for ${account.fullName} (${account.username}). Prior login sessions will be immediately invalidated.',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                    ),
+                    const SizedBox(height: 14),
+                    RadioListTile<bool>(
+                      title: const Text('Auto-generate temporary password', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Creates a secure random 1-time password', style: TextStyle(fontSize: 11)),
+                      value: true,
+                      groupValue: autoGenerate,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          autoGenerate = true;
+                          customPwdCtrl.clear();
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    RadioListTile<bool>(
+                      title: const Text('Set custom temporary password', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      value: false,
+                      groupValue: autoGenerate,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          autoGenerate = false;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    if (!autoGenerate) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: customPwdCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Custom Temporary Password',
+                          hintText: 'Minimum 6 characters',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (!autoGenerate && customPwdCtrl.text.trim().length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Password must be at least 6 characters')),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => isSubmitting = true);
+                          try {
+                            final token = widget.currentUser.accessToken;
+                            final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/users/${account.id}/reset-password');
+                            final body = autoGenerate ? <String, dynamic>{} : {'new_password': customPwdCtrl.text.trim()};
+                            final res = await http.post(
+                              url,
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                if (token != null) 'Authorization': 'Bearer $token',
+                              },
+                              body: jsonEncode(body),
+                            ).timeout(const Duration(seconds: 10));
+
+                            if (res.statusCode != 200) {
+                              final err = jsonDecode(res.body);
+                              throw Exception(err['detail'] ?? 'Failed to reset password (${res.statusCode})');
+                            }
+
+                            final data = jsonDecode(res.body);
+                            final tempPassword = data['temporary_password'] as String;
+
+                            if (!mounted) return;
+                            Navigator.pop(dialogCtx);
+
+                            setState(() {
+                              _revealedPasswordValues[account.id] = tempPassword;
+                              _revealedPasswords.add(account.id);
+                            });
+
+                            _showTemporaryPasswordResult(account, tempPassword);
+                            _loadAccounts();
+                          } catch (e) {
+                            setDialogState(() => isSubmitting = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+                                backgroundColor: AppTheme.alertCrimson,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.alertCrimson,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Reset Password'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showTemporaryPasswordResult(CreatedAccountModel account, String tempPassword) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle, color: AppTheme.cropGreen, size: 24),
+            SizedBox(width: 8),
+            Text('Temporary Password Generated', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('A temporary password has been assigned to ${account.fullName}. The user is required to set a permanent password upon first login.'),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.warmOffWhite,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.sageBorder),
+              ),
+              child: SelectableText(
+                tempPassword,
+                style: const TextStyle(fontSize: 16, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.alertCrimson),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _shareTemporaryPassword(account, tempPassword);
+            },
+            icon: const Icon(Icons.share, size: 16),
+            label: const Text('Copy & Share'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.botanicalPrimary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _shareTemporaryPassword(CreatedAccountModel account, String tempPassword) async {
+    final portal = account.isManager ? 'Admin / Manager Portal' : 'Field Employee Portal';
+    final shareText = '''
+🌿 PhytoDoctor Temporary Login Credentials 🌿
+Portal: $portal
+Role: ${account.role}
+Name: ${account.fullName}
+Username: ${account.username}
+Temporary Password: $tempPassword
+Note: You will be prompted to change this temporary password on initial login.
+''';
+
+    Clipboard.setData(ClipboardData(text: shareText.trim()));
+    await NativeShareService.share(
+      text: shareText.trim(),
+      subject: 'PhytoDoctor Temporary Login Credentials - ${account.fullName}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isCEO = widget.currentUser.isOwner;
@@ -522,25 +752,49 @@ Phone: ${account.phone ?? 'N/A'}
                                                 ],
                                               ),
                                             ),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: isManager ? AppTheme.adminSlateLight : AppTheme.cropGreenLight,
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(
-                                                  color: isManager
-                                                      ? AppTheme.adminSlate.withOpacity(0.3)
-                                                      : AppTheme.cropGreen.withOpacity(0.3),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: isManager ? AppTheme.adminSlateLight : AppTheme.cropGreenLight,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(
+                                                      color: isManager
+                                                          ? AppTheme.adminSlate.withOpacity(0.3)
+                                                          : AppTheme.cropGreen.withOpacity(0.3),
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    isManager ? 'ADMIN' : 'EMPLOYEE',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: isManager ? AppTheme.adminSlate : AppTheme.cropGreen,
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                              child: Text(
-                                                isManager ? 'ADMIN' : 'EMPLOYEE',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: isManager ? AppTheme.adminSlate : AppTheme.cropGreen,
-                                                ),
-                                              ),
+                                                if (acc.mustChangePassword) ...[
+                                                  const SizedBox(width: 4),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.amber.shade50,
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: Colors.amber.shade400),
+                                                    ),
+                                                    child: const Text(
+                                                      'TEMP PWD',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: Colors.deepOrange,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
                                             ),
                                           ],
                                         ),
@@ -701,21 +955,39 @@ Phone: ${account.phone ?? 'N/A'}
 
                                         const SizedBox(height: 12),
 
-                                        // Action Button: Change Credentials
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: OutlinedButton.icon(
-                                            onPressed: () => _showChangeCredentialsDialog(acc),
-                                            icon: const Icon(Icons.edit_note, size: 16, color: AppTheme.botanicalPrimary),
-                                            label: const Text(
-                                              'Change Credentials',
-                                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.botanicalPrimary),
+                                        // Action Buttons: Edit Info & Reset Password
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: OutlinedButton.icon(
+                                                onPressed: () => _showChangeCredentialsDialog(acc),
+                                                icon: const Icon(Icons.edit_note, size: 15, color: AppTheme.botanicalPrimary),
+                                                label: const Text(
+                                                  'Edit Info',
+                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.botanicalPrimary),
+                                                ),
+                                                style: OutlinedButton.styleFrom(
+                                                  side: const BorderSide(color: AppTheme.botanicalPrimary),
+                                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                                ),
+                                              ),
                                             ),
-                                            style: OutlinedButton.styleFrom(
-                                              side: const BorderSide(color: AppTheme.botanicalPrimary),
-                                              padding: const EdgeInsets.symmetric(vertical: 8),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: OutlinedButton.icon(
+                                                onPressed: () => _showResetPasswordDialog(acc),
+                                                icon: const Icon(Icons.lock_reset, size: 15, color: AppTheme.alertCrimson),
+                                                label: const Text(
+                                                  'Reset Pwd',
+                                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.alertCrimson),
+                                                ),
+                                                style: OutlinedButton.styleFrom(
+                                                  side: const BorderSide(color: AppTheme.alertCrimson),
+                                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                          ],
                                         ),
                                       ],
                                     ),

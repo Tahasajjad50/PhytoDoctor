@@ -44,6 +44,9 @@ def _run_sqlite_column_migrations(conn):
         if "designation" not in existing_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN designation VARCHAR(100)"))
             print("[Migration] Added designation to users")
+        if "must_change_password" not in existing_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
+            print("[Migration] Added must_change_password to users")
     except Exception as e:
         print(f"[Migration Warning] {e}")
 
