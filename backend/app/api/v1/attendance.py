@@ -2,7 +2,7 @@ from datetime import datetime, timezone, date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -191,10 +191,22 @@ async def get_admin_attendance_roster(
 ):
     today = datetime.now(timezone.utc).date()
 
-    # Query all active employees
-    emp_query = select(User).where(
-        and_(User.role == UserRole.EMPLOYEE.value, User.is_active == True)
-    ).order_by(User.full_name.asc())
+    # Query active employees (Managers see supervised/assigned team; Owner sees all)
+    if admin_user.role == UserRole.MANAGER.value:
+        emp_query = select(User).where(
+            and_(
+                User.role == UserRole.EMPLOYEE.value,
+                User.is_active == True,
+                or_(
+                    User.manager_id == admin_user.id,
+                    User.created_by_id == admin_user.id
+                )
+            )
+        ).order_by(User.full_name.asc())
+    else:
+        emp_query = select(User).where(
+            and_(User.role == UserRole.EMPLOYEE.value, User.is_active == True)
+        ).order_by(User.full_name.asc())
     emp_res = await db.execute(emp_query)
     employees = emp_res.scalars().all()
 

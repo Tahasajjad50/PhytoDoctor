@@ -1,13 +1,22 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../../core/models/user_model.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../../data/repositories/real_visit_repository.dart';
 import 'visit_detail_screen.dart';
 
 class VisitHistoryScreen extends StatefulWidget {
   final UserModel user;
+  final String? employeeId;
+  final String? employeeName;
 
-  const VisitHistoryScreen({Key? key, required this.user}) : super(key: key);
+  const VisitHistoryScreen({
+    Key? key,
+    required this.user,
+    this.employeeId,
+    this.employeeName,
+  }) : super(key: key);
 
   @override
   State<VisitHistoryScreen> createState() => _VisitHistoryScreenState();
@@ -15,34 +24,55 @@ class VisitHistoryScreen extends StatefulWidget {
 
 class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
   String _selectedFilter = 'ALL';
-  List<Map<String, dynamic>> _visits = [];
   bool _isLoading = true;
   String? _errorMessage;
+  List<Map<String, dynamic>> _visits = [];
 
   @override
   void initState() {
     super.initState();
-    _loadVisits();
+    _fetchVisits();
   }
 
-  Future<void> _loadVisits() async {
+  Future<void> _fetchVisits() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final repo = RealVisitRepository();
-      final items = await repo.getVisitHistory(widget.user.accessToken ?? '');
-      if (!mounted) return;
-      setState(() {
-        _visits = items;
-        _isLoading = false;
-      });
+      final token = widget.user.accessToken;
+      final targetEmpId = widget.employeeId ?? (widget.user.isEmployee ? widget.user.id : null);
+      var query = 'limit=100';
+      if (targetEmpId != null) {
+        query += '&employee_id=$targetEmpId';
+      }
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits?$query');
+      final res = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final List<dynamic> items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
+        final parsed = items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        if (!mounted) return;
+        setState(() {
+          _visits = parsed;
+          _isLoading = false;
+        });
+      } else {
+        final err = jsonDecode(res.body);
+        throw Exception(err['detail'] ?? 'Failed to load visits (${res.statusCode})');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Could not load visits: ${e.toString().replaceAll('Exception: ', '')}';
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
       });
     }
@@ -52,151 +82,130 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
   Widget build(BuildContext context) {
     final filteredVisits = _visits.where((v) {
       if (_selectedFilter == 'ALL') return true;
-      final s = v['status']?.toString().toUpperCase() ?? '';
-      return s == _selectedFilter;
+      final status = (v['status']?.toString() ?? '').toUpperCase();
+      return status == _selectedFilter;
     }).toList();
 
-    final verifiedCount = _visits.where((v) => (v['status']?.toString().toUpperCase() ?? '') == 'VERIFIED').length;
-    final pendingCount = _visits.where((v) => (v['status']?.toString().toUpperCase() ?? '') == 'PENDING').length;
-    final rejectedCount = _visits.where((v) => (v['status']?.toString().toUpperCase() ?? '') == 'REJECTED').length;
+    final verifiedCount = _visits.where((v) => (v['status']?.toString() ?? '').toUpperCase() == 'VERIFIED').length;
+    final pendingCount = _visits.where((v) => (v['status']?.toString() ?? '').toUpperCase() == 'PENDING').length;
+    final rejectedCount = _visits.where((v) => (v['status']?.toString() ?? '').toUpperCase() == 'REJECTED').length;
+
+    final title = widget.employeeName != null
+        ? '${widget.employeeName} - Visit History'
+        : 'Field Visit History';
 
     return Scaffold(
       backgroundColor: AppTheme.warmOffWhite,
       appBar: AppBar(
-        title: const Text('Field Visit History'),
+        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadVisits,
-            tooltip: 'Refresh Visits',
+            tooltip: 'Refresh',
+            onPressed: _fetchVisits,
           ),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Filter Pills Bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              color: AppTheme.surfaceCard,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _FilterTab(
-                      title: 'All (${_visits.length})',
-                      isSelected: _selectedFilter == 'ALL',
-                      onTap: () => setState(() => _selectedFilter = 'ALL'),
-                    ),
-                    const SizedBox(width: 8),
-                    _FilterTab(
-                      title: 'Verified ($verifiedCount)',
-                      isSelected: _selectedFilter == 'VERIFIED',
-                      badgeColor: AppTheme.cropGreen,
-                      onTap: () => setState(() => _selectedFilter = 'VERIFIED'),
-                    ),
-                    const SizedBox(width: 8),
-                    _FilterTab(
-                      title: 'Pending ($pendingCount)',
-                      isSelected: _selectedFilter == 'PENDING',
-                      badgeColor: AppTheme.earthAmber,
-                      onTap: () => setState(() => _selectedFilter = 'PENDING'),
-                    ),
-                    const SizedBox(width: 8),
-                    _FilterTab(
-                      title: 'Rejected ($rejectedCount)',
-                      isSelected: _selectedFilter == 'REJECTED',
-                      badgeColor: AppTheme.alertCrimson,
-                      onTap: () => setState(() => _selectedFilter = 'REJECTED'),
-                    ),
-                  ],
+        child: RefreshIndicator(
+          onRefresh: _fetchVisits,
+          child: Column(
+            children: [
+              // Filter Pills Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                color: AppTheme.surfaceCard,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _FilterTab(
+                        title: 'All (${_visits.length})',
+                        isSelected: _selectedFilter == 'ALL',
+                        onTap: () => setState(() => _selectedFilter == 'ALL'),
+                      ),
+                      const SizedBox(width: 8),
+                      _FilterTab(
+                        title: 'Verified ($verifiedCount)',
+                        isSelected: _selectedFilter == 'VERIFIED',
+                        badgeColor: AppTheme.cropGreen,
+                        onTap: () => setState(() => _selectedFilter == 'VERIFIED'),
+                      ),
+                      const SizedBox(width: 8),
+                      _FilterTab(
+                        title: 'Pending ($pendingCount)',
+                        isSelected: _selectedFilter == 'PENDING',
+                        badgeColor: AppTheme.earthAmber,
+                        onTap: () => setState(() => _selectedFilter == 'PENDING'),
+                      ),
+                      const SizedBox(width: 8),
+                      _FilterTab(
+                        title: 'Rejected ($rejectedCount)',
+                        isSelected: _selectedFilter == 'REJECTED',
+                        badgeColor: AppTheme.alertCrimson,
+                        onTap: () => setState(() => _selectedFilter == 'REJECTED'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const Divider(height: 1),
+              const Divider(height: 1),
 
-            // Visit Cards List
-            Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: AppTheme.botanicalPrimary),
-                    )
-                  : _errorMessage != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.error_outline, size: 48, color: AppTheme.alertCrimson),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _errorMessage!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
-                                ),
-                                const SizedBox(height: 16),
-                                ElevatedButton.icon(
-                                  onPressed: _loadVisits,
-                                  icon: const Icon(Icons.refresh, size: 16),
-                                  label: const Text('Retry'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.botanicalPrimary,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : filteredVisits.isEmpty
-                          ? RefreshIndicator(
-                              onRefresh: _loadVisits,
-                              color: AppTheme.botanicalPrimary,
-                              child: ListView(
-                                physics: const AlwaysScrollableScrollPhysics(),
+              // Content Area
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                        child: CircularProgressIndicator(color: AppTheme.botanicalPrimary),
+                      )
+                    : _errorMessage != null
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  SizedBox(
-                                    height: MediaQuery.of(context).size.height * 0.45,
-                                    child: Center(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(Icons.assignment_outlined, size: 48, color: AppTheme.textMuted),
-                                          const SizedBox(height: 12),
-                                          Text(
-                                            _selectedFilter == 'ALL'
-                                                ? 'No field visits logged yet.\nSubmit visits to see live history here.'
-                                                : 'No $_selectedFilter field visits found.',
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(color: AppTheme.textMuted),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                  const Icon(Icons.error_outline, size: 48, color: AppTheme.alertCrimson),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _errorMessage!,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton(
+                                    onPressed: _fetchVisits,
+                                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.botanicalPrimary),
+                                    child: const Text('Retry'),
                                   ),
                                 ],
                               ),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: _loadVisits,
-                              color: AppTheme.botanicalPrimary,
-                              child: ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
+                            ),
+                          )
+                        : filteredVisits.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.assignment_outlined, size: 48, color: AppTheme.textMuted),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _visits.isEmpty
+                                          ? 'No field visits recorded yet.'
+                                          : 'No visits matching selected filter.',
+                                      style: const TextStyle(fontSize: 14, color: AppTheme.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : ListView.separated(
                                 padding: const EdgeInsets.all(16),
                                 itemCount: filteredVisits.length,
                                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                                 itemBuilder: (context, index) {
                                   final visit = filteredVisits[index];
-                                  final status = visit['status']?.toString().toUpperCase() ?? 'PENDING';
+                                  final status = (visit['status']?.toString() ?? 'PENDING').toUpperCase();
                                   final isVerified = status == 'VERIFIED';
                                   final isPending = status == 'PENDING';
-
-                                  final clientName = visit['client_name']?.toString() ?? 'Field Client';
-                                  final purpose = visit['purpose']?.toString() ?? visit['notes']?.toString() ?? 'Crop Health Inspection';
-                                  final timestamp = visit['timestamp']?.toString() ?? visit['device_capture_time']?.toString() ?? 'Recent';
-                                  final accuracy = visit['accuracy']?.toString() ?? (visit['gps_accuracy'] != null ? '${visit['gps_accuracy']}m' : '10.0m');
-                                  final clientType = visit['client_type']?.toString() ?? 'CLIENT';
 
                                   Color badgeColor = isVerified
                                       ? AppTheme.cropGreen
@@ -204,6 +213,12 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                   Color badgeBg = isVerified
                                       ? AppTheme.cropGreenLight
                                       : (isPending ? AppTheme.earthAmberLight : AppTheme.alertCrimsonLight);
+
+                                  final clientName = visit['client_name']?.toString() ?? 'Field Visit';
+                                  final empName = visit['employee_name']?.toString() ?? visit['officer']?.toString() ?? '';
+                                  final notes = visit['notes']?.toString() ?? visit['purpose']?.toString() ?? 'Field Inspection';
+                                  final captureTime = visit['device_capture_time']?.toString() ?? visit['timestamp']?.toString() ?? '';
+                                  final accuracy = visit['gps_accuracy'] ?? visit['accuracy'] ?? 10;
 
                                   return InkWell(
                                     onTap: () {
@@ -214,7 +229,6 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                         ),
                                       );
                                     },
-                                    borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
                                     child: Container(
                                       padding: const EdgeInsets.all(16),
                                       decoration: BoxDecoration(
@@ -236,6 +250,7 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                                     fontWeight: FontWeight.w700,
                                                     color: AppTheme.textMain,
                                                   ),
+                                                  overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
                                               Container(
@@ -256,25 +271,36 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                               ),
                                             ],
                                           ),
+                                          if (empName.isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Officer: $empName',
+                                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.botanicalPrimary),
+                                            ),
+                                          ],
                                           const SizedBox(height: 6),
                                           Text(
-                                            '$purpose • $clientType',
+                                            notes,
                                             style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           const SizedBox(height: 10),
                                           Row(
                                             children: [
                                               const Icon(Icons.access_time, size: 14, color: AppTheme.textMuted),
                                               const SizedBox(width: 4),
-                                              Text(
-                                                timestamp,
-                                                style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                              Expanded(
+                                                child: Text(
+                                                  captureTime.length > 19 ? captureTime.substring(0, 19).replaceFirst('T', ' ') : captureTime,
+                                                  style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
                                               ),
-                                              const SizedBox(width: 14),
                                               const Icon(Icons.location_on, size: 14, color: AppTheme.botanicalPrimary),
                                               const SizedBox(width: 4),
                                               Text(
-                                                'GPS ±$accuracy',
+                                                'GPS ±${accuracy}m',
                                                 style: const TextStyle(fontSize: 12, color: AppTheme.botanicalPrimary),
                                               ),
                                             ],
@@ -285,9 +311,9 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                   );
                                 },
                               ),
-                            ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -312,7 +338,6 @@ class _FilterTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(

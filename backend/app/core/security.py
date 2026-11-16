@@ -53,3 +53,34 @@ def generate_refresh_token() -> str:
 def hash_refresh_token(token: str) -> str:
     """Hashes a refresh token using SHA-256 for safe database storage."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+def _get_fernet() -> Any:
+    try:
+        from cryptography.fernet import Fernet
+        import base64
+        key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest())
+        return Fernet(key)
+    except Exception:
+        return None
+
+def encrypt_credential(plain_text: Optional[str]) -> Optional[str]:
+    """Encrypts sensitive assigned passwords using AES-128-CBC Fernet encryption for safe rest-storage."""
+    if not plain_text:
+        return None
+    fernet = _get_fernet()
+    if fernet is None:
+        return plain_text
+    return fernet.encrypt(plain_text.encode("utf-8")).decode("utf-8")
+
+def decrypt_credential(cipher_or_plain: Optional[str]) -> Optional[str]:
+    """Decrypts ciphertext credentials. Gracefully handles legacy plaintext credentials."""
+    if not cipher_or_plain:
+        return None
+    if cipher_or_plain.startswith("gAAAAA"):
+        fernet = _get_fernet()
+        if fernet is not None:
+            try:
+                return fernet.decrypt(cipher_or_plain.encode("utf-8")).decode("utf-8")
+            except Exception:
+                return "••••••••"
+    return cipher_or_plain

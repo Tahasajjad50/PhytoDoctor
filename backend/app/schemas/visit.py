@@ -38,6 +38,7 @@ class VisitVerifyRequest(BaseModel):
 class VisitResponse(BaseModel):
     id: str
     employee_id: str
+    employee_name: Optional[str] = None
     client_name: str
     client_phone: Optional[str] = None
     notes: Optional[str] = None
@@ -60,15 +61,6 @@ class VisitResponse(BaseModel):
     reviewed_at: Optional[datetime] = None
     created_at: datetime
 
-    # Mobile client friendly convenience aliases
-    employee_name: Optional[str] = None
-    officer: Optional[str] = None
-    purpose: Optional[str] = None
-    distance_to_shop: Optional[str] = None
-    accuracy: Optional[str] = None
-    timestamp: Optional[str] = None
-    photo_id: Optional[str] = None
-    client_type: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -23,18 +23,6 @@ router = APIRouter(prefix="/visits", tags=["Field Visits"])
 # Configurable accuracy threshold in meters
 GPS_ACCURACY_THRESHOLD_METERS = 50.0
 
-def enrich_visit_response(visit: FieldVisit, employee_name: str = "Field Agronomist") -> VisitResponse:
-    vr = VisitResponse.model_validate(visit)
-    vr.employee_name = employee_name
-    vr.officer = employee_name
-    vr.purpose = visit.notes or "Crop Health Inspection"
-    vr.distance_to_shop = "On-Site Field Visit"
-    vr.accuracy = f"{visit.gps_accuracy:.1f}m"
-    vr.timestamp = visit.device_capture_time.strftime("%b %d, %I:%M %p")
-    vr.photo_id = visit.photo_asset_id
-    vr.client_type = "CLIENT"
-    return vr
-
 @router.get("/evidence-policy", response_model=EvidencePolicyResponse)
 async def get_evidence_policy():
     """
@@ -153,7 +141,7 @@ async def create_visit(
     )
     await db.commit()
     await db.refresh(visit)
-    return enrich_visit_response(visit, current_user.full_name)
+    return VisitResponse.model_validate(visit)
 
 @router.get("", response_model=PaginatedVisitsResponse)
 @router.get("/", response_model=PaginatedVisitsResponse)
@@ -200,20 +188,41 @@ async def list_visits(
     total_res = await db.execute(count_query)
     total = total_res.scalar() or 0
 
+    query = (
+        select(FieldVisit, User.full_name.label("employee_name"))
+        .outerjoin(User, FieldVisit.employee_id == User.id)
+    )
+    # Re-apply filters on join query
+    if current_user.role == UserRole.EMPLOYEE.value:
+        query = query.where(FieldVisit.employee_id == current_user.id)
+    elif current_user.role == UserRole.MANAGER.value:
+        team_subquery = select(User.id).where(User.manager_id == current_user.id)
+        query = query.where(
+            (FieldVisit.employee_id == current_user.id) | (FieldVisit.employee_id.in_(team_subquery))
+        )
+        if employee_id:
+            query = query.where(FieldVisit.employee_id == employee_id)
+    elif current_user.role == UserRole.OWNER.value:
+        if employee_id:
+            query = query.where(FieldVisit.employee_id == employee_id)
+
+    if status:
+        query = query.where(FieldVisit.status == status.upper())
+    if is_flagged is not None:
+        query = query.where(FieldVisit.is_flagged_for_review == is_flagged)
+
     query = query.order_by(FieldVisit.device_capture_time.desc()).offset(skip).limit(limit)
     res = await db.execute(query)
-    visits = res.scalars().all()
+    rows = res.all()
 
-    emp_ids = list({v.employee_id for v in visits})
-    emp_map = {}
-    if emp_ids:
-        emp_res = await db.execute(select(User.id, User.full_name).where(User.id.in_(emp_ids)))
-        emp_map = {row[0]: row[1] for row in emp_res.all()}
-
-    response_items = [enrich_visit_response(v, emp_map.get(v.employee_id, "Field Agronomist")) for v in visits]
+    items = []
+    for v_obj, emp_name in rows:
+        v_resp = VisitResponse.model_validate(v_obj)
+        v_resp.employee_name = emp_name or "Field Agronomist"
+        items.append(v_resp)
 
     return PaginatedVisitsResponse(
-        items=response_items,
+        items=items,
         total=total,
         skip=skip,
         limit=limit,
@@ -233,9 +242,7 @@ async def get_visit_details(
     if current_user.role == UserRole.EMPLOYEE.value and visit.employee_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
     
-    emp = await db.get(User, visit.employee_id)
-    emp_name = emp.full_name if emp else "Field Agronomist"
-    return enrich_visit_response(visit, emp_name)
+    return VisitResponse.model_validate(visit)
 
 @router.post("/{visit_id}/verify", response_model=VisitResponse)
 async def verify_or_reject_visit(
@@ -276,4 +283,4 @@ async def verify_or_reject_visit(
     )
     await db.commit()
     await db.refresh(visit)
-    return enrich_visit_response(visit, current_user.full_name)
+    return VisitResponse.model_validate(visit)

@@ -1,4 +1,5 @@
 from typing import List, Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -28,7 +29,12 @@ class Settings(BaseSettings):
         return url
     
     # CORS Configuration
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "https://phytodoctor-api.onrender.com",
+    ]
     
     # Cloudinary Image Storage (Optional in dev, configured in prod)
     CLOUDINARY_CLOUD_NAME: Optional[str] = None
@@ -38,6 +44,13 @@ class Settings(BaseSettings):
     CLOUDINARY_MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB maximum
     CLOUDINARY_ALLOWED_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "webp"]
     CLOUDINARY_ALLOWED_MIME_TYPES: List[str] = ["image/jpeg", "image/png", "image/webp"]
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if self.ENVIRONMENT == "production":
+            if self.SECRET_KEY == "phyto_doctor_jwt_secret_key_production_override_required_2026":
+                raise ValueError("FATAL SECURITY VIOLATION: Production environment must configure SECRET_KEY in environment variables.")
+        return self
 
     
     model_config = SettingsConfigDict(

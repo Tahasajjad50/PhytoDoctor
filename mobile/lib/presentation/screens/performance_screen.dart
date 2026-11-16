@@ -24,8 +24,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   late final VisitRepository _repository;
   String _timeframe = 'DAILY'; // 'DAILY', 'WEEKLY', 'MONTHLY'
   bool _showTeamView = false; // Toggle for Manager / Owner
-  String? _selectedEmployeeId;
-  String? _selectedEmployeeName;
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -52,7 +50,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   void initState() {
     super.initState();
     _repository = widget.repository ?? RealVisitRepository();
-    _showTeamView = widget.user.isManager || widget.user.isOwner;
     _loadAnalytics();
   }
 
@@ -85,10 +82,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         });
       } else {
         // Fetch personal employee analytics
-        final targetEmpId = _selectedEmployeeId ?? widget.user.id;
         final data = await _repository.getPerformanceAnalytics(
           token: token,
-          employeeId: targetEmpId,
+          employeeId: widget.user.id,
           timeframe: _timeframe,
         );
 
@@ -113,12 +109,41 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
           _isLoading = false;
         });
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = 'Could not load live performance data. Please pull down to retry.';
-        _isLoading = false;
-      });
+    } catch (_) {
+      // Fallback to MockVisitRepository if network is offline
+      try {
+        final mockRepo = MockVisitRepository();
+        final mockData = await mockRepo.getPerformanceAnalytics(
+          token: '',
+          employeeId: widget.user.id,
+          timeframe: _timeframe,
+        );
+
+        if (!mounted) return;
+        setState(() {
+          _targetVisits = mockData['target_visits'];
+          _submittedVisits = mockData['submitted_visits'];
+          _verifiedVisits = mockData['verified_visits'];
+          _remainingVisits = mockData['remaining_visits'];
+          _rejectedVisits = mockData['rejected_visits'];
+          _pendingSyncCount = mockData['pending_sync_count'];
+          _flaggedVisitsCount = mockData['flagged_visits_count'];
+          _completionPercentage = (mockData['completion_percentage'] as num).toDouble();
+          _trendPoints = (mockData['trend_points'] as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+          _recentReviews = (mockData['recent_reviews'] as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+          _isLoading = false;
+        });
+      } catch (err) {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = 'Could not load performance metrics. Please pull down to retry.';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -211,50 +236,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_selectedEmployeeName != null) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.sageLight,
-              borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
-              border: Border.all(color: AppTheme.sageBorder),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.person, size: 18, color: AppTheme.botanicalPrimary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Agronomist: $_selectedEmployeeName',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.botanicalPrimary),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _selectedEmployeeId = null;
-                      _selectedEmployeeName = null;
-                      _showTeamView = true;
-                    });
-                    _loadAnalytics();
-                  },
-                  icon: const Icon(Icons.groups, size: 16),
-                  label: const Text('All Team', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  style: TextButton.styleFrom(foregroundColor: AppTheme.botanicalPrimary),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-        ],
-
         // Target Quota Progress Card
         Container(
           padding: const EdgeInsets.all(20),
@@ -468,68 +449,38 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
           const SizedBox(height: 18),
         ],
 
-        // Field Visit Submissions & Audit Status
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceCard,
-            borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
-            border: Border.all(color: AppTheme.sageBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Field Visit Submissions & Audit Status',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
-                  ),
-                  Text(
-                    '${_recentReviews.length} Submissions',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.botanicalPrimary),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              if (_recentReviews.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 14),
-                  child: Center(
-                    child: Text(
-                      'No visits submitted for this timeframe yet.',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                    ),
-                  ),
-                )
-              else
+        // Supervisor Review History / Feedback
+        if (_recentReviews.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceCard,
+              borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+              border: Border.all(color: AppTheme.sageBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Audit Feedback & Review Reasons',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+                ),
+                const SizedBox(height: 10),
                 Column(
                   children: _recentReviews.map((rev) {
                     final status = rev['status'] as String? ?? 'PENDING';
                     final isRejected = status == 'REJECTED';
-                    final isVerified = status == 'VERIFIED';
-                    final isPending = status == 'PENDING';
                     final clientName = rev['client_name'] as String? ?? 'Field Visit';
-                    final reason = rev['review_reason'] as String? ?? (isPending ? 'Awaiting supervisor verification' : 'Verified on-site by supervisor');
-
-                    Color badgeColor = isVerified
-                        ? AppTheme.cropGreen
-                        : (isPending ? AppTheme.earthAmber : AppTheme.alertCrimson);
-                    Color badgeBg = isVerified
-                        ? AppTheme.cropGreenLight
-                        : (isPending ? AppTheme.earthAmberLight : AppTheme.alertCrimsonLight);
+                    final reason = rev['review_reason'] as String? ?? 'No specific feedback provided.';
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: isRejected
-                            ? const Color(0xFFFFEBEE)
-                            : (isPending ? AppTheme.warmOffWhite : AppTheme.sageLight),
+                        color: isRejected ? const Color(0xFFFFEBEE) : AppTheme.sageLight,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: badgeColor.withOpacity(0.4),
+                          color: isRejected ? AppTheme.alertCrimson.withOpacity(0.4) : AppTheme.sageBorder,
                         ),
                       ),
                       child: Column(
@@ -545,13 +496,12 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: badgeBg,
+                                  color: isRejected ? AppTheme.alertCrimson : AppTheme.cropGreen,
                                   borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: badgeColor),
                                 ),
                                 child: Text(
                                   status,
-                                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: badgeColor),
+                                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: Colors.white),
                                 ),
                               ),
                             ],
@@ -570,10 +520,11 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                     );
                   }).toList(),
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
+          const SizedBox(height: 20),
+        ],
       ],
     );
   }
@@ -644,73 +595,60 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                   final pct = (member['completion_percentage'] as num?)?.toDouble() ?? 0.0;
                   final flagged = member['flagged_visits'] ?? 0;
 
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        _selectedEmployeeId = member['employee_id'] as String?;
-                        _selectedEmployeeName = name;
-                        _showTeamView = false;
-                      });
-                      _loadAnalytics();
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: index == 0 ? AppTheme.sageLight : AppTheme.warmOffWhite,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppTheme.sageBorder),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundColor: index == 0 ? AppTheme.botanicalPrimary : AppTheme.sageLight,
-                            child: Text(
-                              '${index + 1}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: index == 0 ? Colors.white : AppTheme.textMain,
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: index == 0 ? AppTheme.sageLight : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.sageBorder),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundColor: index == 0 ? AppTheme.botanicalPrimary : AppTheme.sageLight,
+                          child: Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: index == 0 ? Colors.white : AppTheme.textMain,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name,
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain),
-                                ),
-                                Text(
-                                  '$verified of $target verified ($pct%) ${flagged > 0 ? "• $flagged flagged" : ""}',
-                                  style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: pct >= 100 ? AppTheme.cropGreenLight : AppTheme.earthAmberLight,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '$pct%',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: pct >= 100 ? AppTheme.cropGreen : AppTheme.earthAmber,
+                              Text(
+                                '$verified of $target verified ($pct%) ${flagged > 0 ? "• $flagged flagged" : ""}',
+                                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                               ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: pct >= 100 ? AppTheme.cropGreenLight : AppTheme.earthAmberLight,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '$pct%',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: pct >= 100 ? AppTheme.cropGreen : AppTheme.earthAmber,
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.textMuted),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   );
                 }).toList(),

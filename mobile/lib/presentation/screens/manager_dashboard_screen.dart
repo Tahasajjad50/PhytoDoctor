@@ -13,6 +13,7 @@ import 'employee_attendance_screen.dart';
 import 'portal_selection_screen.dart';
 import 'profile_settings_screen.dart';
 import 'visit_detail_screen.dart';
+import 'visit_history_screen.dart';
 
 class ManagerDashboardScreen extends StatefulWidget {
   final UserModel user;
@@ -32,10 +33,10 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
   void initState() {
     super.initState();
     _loadPendingVisits();
-    _loadTeamMembers();
+    _loadTeamRoster();
     _refreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       _loadPendingVisits();
-      _loadTeamMembers();
+      _loadTeamRoster();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppUpdateService.checkAndPromptUpdate(context);
@@ -48,24 +49,22 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _loadTeamMembers() async {
+  Future<void> _loadTeamRoster() async {
     try {
       final token = widget.user.accessToken;
-      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/users/created-accounts');
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/attendance/admin/roster');
       final res = await http.get(
         url,
         headers: {
           'Accept': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
         },
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 5));
 
       if (res.statusCode == 200) {
-        final List<dynamic> items = jsonDecode(res.body);
-        final parsed = items
-            .where((item) => item['role'] == 'EMPLOYEE')
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
+        final data = jsonDecode(res.body);
+        final List<dynamic> items = data is Map ? (data['employees'] ?? []) : [];
+        final parsed = items.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         if (!mounted) return;
         setState(() {
           _teamMembers.clear();
@@ -73,7 +72,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         });
       }
     } catch (_) {
-      // keep existing on transient network issues
+      // keep existing roster
     }
   }
 
@@ -129,7 +128,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     try {
       final token = widget.user.accessToken;
       final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits/$visitId/verify');
-      await http.post(
+      final res = await http.post(
         url,
         headers: {
           'Content-Type': 'application/json',
@@ -137,26 +136,37 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           if (token != null) 'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'decision': approved ? 'VERIFIED' : 'REJECTED',
-          'notes': approved ? 'Verified by supervisor' : 'Flagged by supervisor',
+          'status': approved ? 'VERIFIED' : 'REJECTED',
+          'review_reason': approved ? 'Verified on-site by supervisor' : 'Flagged by supervisor review',
         }),
       ).timeout(const Duration(seconds: 6));
-    } catch (_) {
-      // ignore
-    }
 
-    if (!mounted) return;
-    setState(() {
-      _pendingAudits.removeAt(index);
+      if (res.statusCode == 200) {
+        if (!mounted) return;
+        setState(() {
+          _pendingAudits.removeAt(index);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(approved
+                ? 'Visit verified & approved for ${item['client_name'] ?? 'client'}'
+                : 'Visit flagged / rejected for ${item['client_name'] ?? 'client'}'),
+            backgroundColor: approved ? AppTheme.cropGreen : AppTheme.alertCrimson,
+          ),
+        );
+      } else {
+        final err = jsonDecode(res.body);
+        throw Exception(err['detail'] ?? 'Verification failed (${res.statusCode})');
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(approved
-              ? 'Visit verified & approved for ${item['client_name']}'
-              : 'Visit flagged / rejected for ${item['client_name']}'),
-          backgroundColor: approved ? AppTheme.cropGreen : AppTheme.alertCrimson,
+          content: Text('Error updating visit: $e'),
+          backgroundColor: AppTheme.alertCrimson,
         ),
       );
-    });
+    }
   }
 
   @override
@@ -342,7 +352,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                     child: const Icon(Icons.manage_accounts, color: AppTheme.adminSlate, size: 20),
                   ),
                   title: const Text('Supervised Employee Accounts', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: const Text('View & manage credentials for supervised field team', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                  subtitle: const Text('View & change credentials for employees created by you', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMuted),
                   onTap: () {
                     Navigator.push(
@@ -403,14 +413,14 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                   separatorBuilder: (context, index) => const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final audit = _pendingAudits[index];
-                    final lat = (audit['latitude'] as num?)?.toDouble() ?? 31.5204;
-                    final lng = (audit['longitude'] as num?)?.toDouble() ?? 74.3587;
+                    final lat = (audit['latitude'] as num?)?.toDouble() ?? 0.0;
+                    final lng = (audit['longitude'] as num?)?.toDouble() ?? 0.0;
                     final clientName = audit['client_name']?.toString() ?? 'Field Visit';
-                    final officer = audit['officer']?.toString() ?? audit['employee_name']?.toString() ?? 'Field Agronomist';
-                    final purpose = audit['purpose']?.toString() ?? audit['notes']?.toString() ?? 'Field Crop Inspection';
-                    final timestamp = audit['timestamp']?.toString() ?? audit['device_capture_time']?.toString() ?? 'Recent';
-                    final distanceToShop = audit['distance_to_shop']?.toString() ?? 'On-Site Field Visit';
-                    final accuracy = audit['accuracy']?.toString() ?? '${(audit['gps_accuracy'] as num?)?.toStringAsFixed(1) ?? '10.0'}m';
+                    final officerName = audit['employee_name']?.toString() ?? audit['officer']?.toString() ?? 'Field Agronomist';
+                    final notesText = audit['notes']?.toString() ?? audit['purpose']?.toString() ?? 'Field inspection';
+                    final timeText = audit['device_capture_time']?.toString() ?? audit['timestamp']?.toString() ?? '';
+                    final accuracyVal = audit['gps_accuracy'] ?? audit['accuracy'] ?? 10;
+                    final distanceText = audit['distance_to_shop']?.toString() ?? 'GPS Accuracy: ±${accuracyVal}m';
 
                     return Container(
                       padding: const EdgeInsets.all(14),
@@ -425,19 +435,22 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                clientName,
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+                              Expanded(
+                                child: Text(
+                                  clientName,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                               Text(
-                                'By: $officer',
+                                'By: $officerName',
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.botanicalPrimary),
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '$purpose • $timestamp',
+                            timeText.isNotEmpty ? '$notesText • $timeText' : notesText,
                             style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                           ),
                           const SizedBox(height: 6),
@@ -453,7 +466,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    distanceToShop,
+                                    distanceText,
                                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.cropGreen),
                                   ),
                                 ),
@@ -483,7 +496,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          '${lat.toStringAsFixed(4)}° N, ${lng.toStringAsFixed(4)}° E (±$accuracy)',
+                                          '${lat.toStringAsFixed(4)}° N, ${lng.toStringAsFixed(4)}° E (±${accuracyVal}m)',
                                           style: const TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w800,
@@ -645,156 +658,91 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                 )
               else
                 ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _teamMembers.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final officer = _teamMembers[index];
-                  final name = officer['full_name']?.toString() ?? officer['name']?.toString() ?? 'Field Agronomist';
-                  final code = officer['username']?.toString() ?? officer['code']?.toString() ?? '';
-                  final phone = officer['phone']?.toString() ?? '';
-                  final designation = officer['designation']?.toString() ?? 'Field Agronomist';
-                  final isActive = officer['is_active'] == true || officer['status'] == 'Active';
-                  final statusText = isActive ? 'Active' : 'Offline';
-                  final officerLat = (officer['latitude'] as num?)?.toDouble();
-                  final officerLng = (officer['longitude'] as num?)?.toDouble();
-                  final address = officer['address']?.toString() ?? 'Assigned Territory';
-                  final lastPing = officer['last_ping']?.toString() ?? 'Registered Agronomist';
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _teamMembers.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final officer = _teamMembers[index];
+                    final name = officer['full_name']?.toString() ?? officer['name']?.toString() ?? 'Field Agronomist';
+                    final username = officer['username']?.toString() ?? '';
+                    final designation = officer['designation']?.toString() ?? 'Field Agronomist';
+                    final isOnDuty = officer['is_active_now'] == true;
+                    final statusLabel = isOnDuty ? 'ON DUTY' : 'OFFLINE';
 
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceCard,
+                    return InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => VisitHistoryScreen(
+                              user: widget.user,
+                              employeeId: officer['id']?.toString(),
+                              employeeName: name,
+                            ),
+                          ),
+                        );
+                      },
                       borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
-                      border: Border.all(color: AppTheme.sageBorder),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  name,
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  code.isNotEmpty ? '@$code' : designation,
-                                  style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  designation,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.botanicalPrimary),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  statusText,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: isActive ? AppTheme.cropGreen : AppTheme.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceCard,
+                          borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+                          border: Border.all(color: AppTheme.sageBorder),
                         ),
-                        const SizedBox(height: 8),
-
-                        if (officerLat != null && officerLng != null)
-                          InkWell(
-                            onTap: () => _openGoogleMaps(officerLat, officerLng),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppTheme.warmOffWhite,
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: AppTheme.sageBorder),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: isOnDuty ? AppTheme.cropGreenLight : AppTheme.sageLight,
+                              child: Icon(
+                                isOnDuty ? Icons.check_circle : Icons.person_outline,
+                                color: isOnDuty ? AppTheme.cropGreen : AppTheme.textMuted,
+                                size: 20,
                               ),
-                              child: Row(
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.my_location, size: 14, color: AppTheme.cropGreen),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '$address (${officerLat.toStringAsFixed(4)}°, ${officerLng.toStringAsFixed(4)}°)',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppTheme.botanicalPrimary,
-                                            decoration: TextDecoration.underline,
-                                          ),
-                                        ),
-                                        Text(
-                                          lastPing,
-                                          style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                                        ),
-                                      ],
-                                    ),
+                                  Text(
+                                    name,
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
                                   ),
-                                  OutlinedButton.icon(
-                                    onPressed: () => _openGoogleMaps(officerLat, officerLng),
-                                    icon: const Icon(Icons.navigation, size: 12),
-                                    label: const Text('Check Location now', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
-                                    style: OutlinedButton.styleFrom(
-                                      minimumSize: const Size(0, 30),
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      foregroundColor: AppTheme.botanicalPrimary,
-                                      side: const BorderSide(color: AppTheme.botanicalPrimary),
-                                    ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    username.isNotEmpty ? '@$username • $designation' : designation,
+                                    style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                                   ),
                                 ],
                               ),
                             ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                            decoration: BoxDecoration(
-                              color: AppTheme.warmOffWhite,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: AppTheme.sageBorder),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.badge_outlined, size: 16, color: AppTheme.botanicalPrimary),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    phone.isNotEmpty ? 'Field Agronomist • Phone: $phone' : 'Supervised Field Agronomist',
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMain),
-                                  ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isOnDuty ? AppTheme.cropGreenLight : AppTheme.sageLight,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: isOnDuty ? AppTheme.cropGreen : AppTheme.sageBorder),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: isOnDuty ? AppTheme.cropGreen : AppTheme.textMuted,
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.cropGreenLight,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Text('Supervised', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.cropGreen)),
-                                ),
-                              ],
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                            const SizedBox(width: 6),
+                            const Icon(Icons.chevron_right, size: 16, color: AppTheme.textMuted),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
 
               const SizedBox(height: 24),
             ],

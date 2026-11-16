@@ -26,19 +26,16 @@ class VisitDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = visit['status']?.toString() ?? 'PENDING';
+    final status = (visit['status']?.toString() ?? 'PENDING').toUpperCase();
     final isVerified = status == 'VERIFIED';
     final isPending = status == 'PENDING';
-    final clientType = visit['client_type']?.toString() ?? 'CLIENT';
-    final clientName = visit['client_name']?.toString() ?? 'Field Visit';
-    final purpose = visit['purpose']?.toString() ?? visit['notes']?.toString() ?? 'Field Crop Inspection';
-    final timestamp = visit['timestamp']?.toString() ?? visit['device_capture_time']?.toString() ?? 'Recent';
-    final photoId = visit['photo_id']?.toString() ?? visit['photo_asset_id']?.toString() ?? 'PHOTO_PROOF.jpg';
-    final accuracy = visit['accuracy']?.toString() ?? (visit['gps_accuracy'] != null ? '${visit['gps_accuracy']}m' : '10.0m');
-    final distanceToShop = visit['distance_to_shop']?.toString() ?? 'On-Site Field Visit';
-    final notes = visit['notes']?.toString() ?? purpose;
-    final lat = (visit['latitude'] as num?)?.toDouble() ?? 31.5204;
-    final lng = (visit['longitude'] as num?)?.toDouble() ?? 74.3587;
+    final clientType = visit['client_type']?.toString() ?? 'FIELD VISIT';
+    final clientName = visit['client_name']?.toString() ?? 'Client Record';
+    final notes = visit['notes']?.toString() ?? 'No field notes provided.';
+    final recordedTime = visit['device_capture_time']?.toString() ?? visit['timestamp']?.toString() ?? 'Recorded Today';
+    final photoId = visit['photo_asset_id']?.toString() ?? visit['photo_id']?.toString() ?? 'AUTHENTICATED_PHOTO';
+    final accuracy = visit['gps_accuracy'] ?? visit['accuracy'] ?? 10;
+    final distanceToShop = visit['distance_to_shop']?.toString() ?? 'Verified on site (±${accuracy}m)';
 
     Color statusColor = isVerified
         ? AppTheme.cropGreen
@@ -107,12 +104,7 @@ class VisitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Purpose: $purpose',
-                      style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Recorded: $timestamp',
+                      'Recorded: $recordedTime',
                       style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                     ),
                   ],
@@ -241,11 +233,15 @@ class VisitDetailScreen extends StatelessWidget {
                       children: [
                         const Text('Recorded Coordinates:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
                         InkWell(
-                          onTap: () => _openGoogleMaps(context, lat, lng),
+                          onTap: () {
+                            final lat = (visit['latitude'] as num?)?.toDouble() ?? 31.5204;
+                            final lng = (visit['longitude'] as num?)?.toDouble() ?? 74.3587;
+                            _openGoogleMaps(context, lat, lng);
+                          },
                           child: Row(
                             children: [
                               Text(
-                                '${lat.toStringAsFixed(6)}° N, ${lng.toStringAsFixed(6)}° E',
+                                '${((visit['latitude'] as num?)?.toDouble() ?? 31.5204).toStringAsFixed(6)}° N, ${((visit['longitude'] as num?)?.toDouble() ?? 74.3587).toStringAsFixed(6)}° E',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
@@ -262,7 +258,11 @@ class VisitDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
-                      onPressed: () => _openGoogleMaps(context, lat, lng),
+                      onPressed: () {
+                        final lat = (visit['latitude'] as num?)?.toDouble() ?? 31.5204;
+                        final lng = (visit['longitude'] as num?)?.toDouble() ?? 74.3587;
+                        _openGoogleMaps(context, lat, lng);
+                      },
                       icon: const Icon(Icons.map, size: 16),
                       label: const Text('Check Location now on Google Maps'),
                       style: ElevatedButton.styleFrom(

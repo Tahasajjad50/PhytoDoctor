@@ -5,8 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin, require_owner
-from app.core.rate_limit import login_rate_limiter
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, encrypt_credential, decrypt_credential
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
 from app.schemas.auth import MessageResponse
@@ -70,7 +69,7 @@ async def create_user(
         role=user_in.role.upper(),
         manager_id=manager_id,
         created_by_id=current_user.id,
-        assigned_password=user_in.password,
+        assigned_password=encrypt_credential(user_in.password),
         is_active=user_in.is_active,
         phone=user_in.phone,
         designation=user_in.designation,
@@ -185,7 +184,7 @@ async def list_created_accounts(
                 created_at=user_obj.created_at,
                 created_by_id=user_obj.created_by_id,
                 created_by_name=creator_name or ("Executive Office (CEO)" if user_obj.created_by_id else "System Root"),
-                login_password=user_obj.assigned_password or "••••••••",
+                login_password=decrypt_credential(user_obj.assigned_password) or "••••••••",
             )
         )
     return items
@@ -350,6 +349,8 @@ async def get_user_by_id(
     if current_user.role == UserRole.MANAGER.value and user.manager_id != current_user.id and user.id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to users outside your team.")
     
+    return UserResponse.model_validate(user)
+    
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: str,
@@ -478,8 +479,6 @@ async def reset_password(
         affected_record_type="User",
     )
     await db.commit()
-    login_rate_limiter.clear_key(user.username)
-    login_rate_limiter.clear_key(user.email)
     return MessageResponse(message=f"Password for {user.username} successfully reset.")
 
 @router.put("/{user_id}/credentials", response_model=CreatedAccountResponse)
@@ -530,7 +529,7 @@ async def update_account_credentials(
 
     if req.password:
         target_user.hashed_password = get_password_hash(req.password)
-        target_user.assigned_password = req.password
+        target_user.assigned_password = encrypt_credential(req.password)
 
         # Invalidate active refresh tokens
         token_query = select(RefreshToken).where(RefreshToken.user_id == target_user.id)
@@ -549,8 +548,6 @@ async def update_account_credentials(
     )
     await db.commit()
     await db.refresh(target_user)
-    login_rate_limiter.clear_key(target_user.username)
-    login_rate_limiter.clear_key(target_user.email)
 
     creator_name = None
     if target_user.created_by_id:
@@ -570,7 +567,7 @@ async def update_account_credentials(
         created_at=target_user.created_at,
         created_by_id=target_user.created_by_id,
         created_by_name=creator_name or "System Administrator",
-        login_password=target_user.assigned_password or "••••••••",
+        login_password=decrypt_credential(target_user.assigned_password) or "••••••••",
     )
 
 

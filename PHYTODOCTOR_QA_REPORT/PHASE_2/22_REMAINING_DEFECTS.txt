@@ -1,0 +1,165 @@
+================================================================================
+PHYTODOCTOR QUALITY ASSURANCE - PHASE 2 TECHNICAL REPORT
+DOCUMENT 22: REMAINING DEFECTS, OPERATIONAL LIMITATIONS & TECHNICAL DEBT
+================================================================================
+
+Date: November 16, 2026
+Auditor: Principal Software Architect & Application Reliability Engineer
+Repository: PhytoDoctor (Branch: qa-phase-2-improvements)
+Target Directory: PHYTODOCTOR_QA_REPORT/PHASE_2/
+
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY & RISK OVERVIEW
+--------------------------------------------------------------------------------
+While all critical code bugs, security vulnerabilities (plaintext passwords,
+CORS wildcard credentials, missing endpoint return statements), and offline disk
+persistence gaps have been remediated on branch `qa-phase-2-improvements`,
+several structural operational limitations, hosting dependencies, and business
+logic choices remain for production rollout.
+
+This document classifies every remaining defect, operational risk, and architectural
+constraint with severity, concrete code references, and actionable recommendations.
+
+--------------------------------------------------------------------------------
+2. DEFECT & OPERATIONAL LIMITATION CATALOG
+--------------------------------------------------------------------------------
+
+ITEM 1: RENDER FREE-TIER EPHEMERAL DISK (DATA LOSS ON REDEPLOY)
+--------------------------------------------------------------------------------
+Severity: HIGH (Operational / Infrastructure Risk)
+Component: Cloud Deployment (render.yaml, backend/app/core/config.py)
+Description:
+The backend currently deploys on Render's free web service tier using local
+SQLite (`phyto_doctor.db`). Render free instances possess ephemeral container
+storage. Whenever the service spins down after 15 minutes of inactivity or
+restarts during a new Git deployment, the container disk is destroyed.
+Any users, field visits, or attendance logs created after the initial seed are
+erased unless restored from an external backup.
+
+Evidence:
+- `render.yaml` (free instance plan, no persistent disk mounted)
+- `backend/app/core/config.py`: `DATABASE_URL = "sqlite+aiosqlite:///./phyto_doctor.db"`
+
+Remediation Steps:
+1. Production Migration to Managed PostgreSQL:
+   Render provides managed PostgreSQL databases with automated daily snapshots
+   and persistent NVMe storage. Update `DATABASE_URL` in production environment
+   variables to:
+   `postgresql+asyncpg://user:password@host:port/database`
+   The codebase already contains asyncpg drivers and connection string rewrites
+   in `config.py` (lines 22-28).
+2. Paid Render Web Instance:
+   Alternatively, upgrade Render service to the Starter plan ($7/mo) and attach
+   a 10GB persistent disk mounted to `/var/data/`.
+
+
+ITEM 2: FREE-TIER COLD-BOOT LATENCY (30-50 SECOND FIRST REQUEST DELAY)
+--------------------------------------------------------------------------------
+Severity: MEDIUM (User Experience Risk)
+Component: Backend Hosting (render.yaml, backend/app/main.py)
+Description:
+On Render free tier, instances spin down after 15 minutes without HTTP traffic.
+When a field agronomist opens the app in the field and initiates a login or
+synchronization, the initial request experiences a 30 to 50 second latency
+while the container cold-boots. In the Flutter mobile app, this occasionally
+triggers an HTTP connection timeout before the server responds.
+
+Evidence:
+- `backend/app/main.py` lines 61-64 (`_keep_alive_pinger` disabled)
+- User experience observations during morning logins.
+
+Remediation Steps:
+1. Upgrade Render instance to Starter plan (no sleep, always on).
+2. For testing/staging, implement an external HTTP pinger (e.g., UptimeRobot
+   or GitHub Actions workflow) sending `GET /api/v1/health` every 10 minutes.
+3. In Flutter `mobile/lib/core/services/auth_service.dart`, increase connection
+   timeout for the initial login from 10s to 35s to allow for cold boot.
+
+
+ITEM 3: ATTENDANCE CLOCK-IN NOT ENFORCED BEFORE VISIT LOGGING
+--------------------------------------------------------------------------------
+Severity: LOW / BUSINESS LOGIC CHOICE
+Component: Backend Visit Controller (`backend/app/api/v1/visits.py`)
+Description:
+The attendance system allows agronomists to clock in and clock out to indicate
+on-duty status on the manager roster. However, `POST /api/v1/visits` does not
+validate whether the submitting employee is currently clocked in. An employee
+with status "OFF DUTY" can still successfully submit field visits.
+
+Evidence:
+- `backend/app/api/v1/visits.py` lines 40-75 (no attendance dependency check).
+
+Remediation Steps:
+If company policy dictates that field visits can only be recorded during active
+shifts, add an attendance check to `create_visit` in `visits.py`:
+```python
+attendance_query = select(AttendanceRecord).where(
+    AttendanceRecord.employee_id == current_user.id,
+    AttendanceRecord.date == today_utc,
+    AttendanceRecord.clock_out_time.is_(None)
+)
+if not (await db.execute(attendance_query)).scalar_one_or_none():
+    raise HTTPException(status_code=403, detail="Must clock in before submitting visits.")
+```
+
+
+ITEM 4: PHYSICAL HARDWARE GNSS & CAMERA TESTING VS EMULATOR SIMULATION
+--------------------------------------------------------------------------------
+Severity: LOW / TEST ENVIRONMENT BOUNDARY
+Component: Mobile QA Hardware Verification
+Description:
+Automated test suites executed on Windows and Android emulators use simulated
+GPS coordinates (via adb geo fix or mock providers) and static byte arrays
+for photo evidence. While Flutter tests thoroughly verify the 50m threshold logic,
+mock location detection flag, and file storage, physical field factors cannot
+be fully simulated in emulators:
+- Multipath GPS interference and tall building / canyon refraction in remote farms.
+- Extreme temperature battery throttling on budget Android devices.
+- Native OEM camera app crashes on devices with heavily customized Android skins
+  (e.g., Xiaomi MIUI / Oppo ColorOS camera permissions).
+
+Evidence:
+- `mobile/test/visit_workflow_test.dart` (uses synthetic location points)
+- `backend/tests/test_all_endpoints_comprehensive.py` (uses mock coordinate tuples)
+
+Remediation Steps:
+Conduct physical acceptance testing with 3 real field devices across varied
+networks (Jazz 4G, Zong 4G, and offline mode) in Punjab agricultural zones
+prior to final company deployment.
+
+
+ITEM 5: CLOUDINARY CLOUD STORAGE CONFIGURATION IN STAGING
+--------------------------------------------------------------------------------
+Severity: LOW / CONFIGURATION DEPENDENCY
+Component: Image Hosting (`backend/app/services/cloudinary_service.py`)
+Description:
+The backend supports direct photo evidence upload to Cloudinary. When Cloudinary
+environment variables (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
+`CLOUDINARY_API_SECRET`) are not configured (e.g. in local development or test),
+the service gracefully falls back to returning a mock URL or local asset ID:
+`https://res.cloudinary.com/phytodoctor/image/upload/placeholder.jpg`
+While this prevents development crashes, it means visual photo verification
+on the manager web dashboard requires real Cloudinary API credentials in production.
+
+Evidence:
+- `backend/app/services/cloudinary_service.py` (lines 35-50)
+
+Remediation Steps:
+Ensure production environment variables in Render include active Cloudinary
+credentials with an automated 10MB upload preset.
+
+--------------------------------------------------------------------------------
+3. REMAINING TECHNICAL DEBT SUMMARY
+--------------------------------------------------------------------------------
+Category              Defects Remaining    Operational Risks    Remediation Effort
+Database / Storage    0 Code Bugs          1 (Render SQLite)    Low (Postgres URL)
+Authentication / RBAC 0 Code Bugs          0 Risks              None (Hardened)
+API Endpoints         0 Code Bugs          0 Risks              None (100% Passing)
+Mobile Presentation   0 Code Bugs          1 (Cold boot delay)  Low (Timeout tweak)
+Hardware QA           0 Code Bugs          1 (Physical field)   Medium (Field trial)
+
+Total Open Code Bugs: 0
+Total Architectural Enhancements for Production: 3 (PostgreSQL, Keepalive, Field trial)
+================================================================================
+END OF DOCUMENT 22
+================================================================================

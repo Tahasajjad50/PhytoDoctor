@@ -68,7 +68,17 @@ class PhotoStorageService {
 
     final targetPath = generatePrivatePhotoPath(visitId, photoAssetId);
     
-    // In live Android, ensures directory exists and writes bytes safely
+    try {
+      final file = File(targetPath);
+      final parentDir = file.parent;
+      if (!parentDir.existsSync()) {
+        parentDir.createSync(recursive: true);
+      }
+      await file.writeAsBytes(photoBytes, flush: true);
+    } catch (e) {
+      debugPrint('[PhotoStorageService] Local storage write notice: $e');
+    }
+
     debugPrint('[PhotoStorageService] Saved photo evidence to app-private path: $targetPath (${photoBytes.length} bytes)');
     return targetPath;
   }

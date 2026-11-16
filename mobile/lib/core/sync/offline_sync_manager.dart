@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../data/repositories/visit_repository.dart';
-import '../models/local_visit_model.dart';
 import '../models/visit_state.dart';
 import '../storage/cloudinary_upload_service.dart';
 import '../storage/photo_storage_service.dart';
@@ -37,6 +36,8 @@ class OfflineSyncManager extends ChangeNotifier {
 
   /// Initializes manager, checks storage health, and counts pending records
   Future<void> initialize() async {
+    _isSyncing = false;
+    _lastError = null;
     await _db.initDatabase();
     await refreshCounts();
     await checkStorageHealth();

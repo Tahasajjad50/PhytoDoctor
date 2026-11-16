@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 enum Environment { dev, staging, prod }
 
 class AppConfig {
@@ -11,8 +9,6 @@ class AppConfig {
   // e.g. flutter run --dart-define=API_URL=https://api.phytodoctor.pk
   // Production Render Cloud API URL:
   static const String _defaultCloudUrl = 'https://phytodoctor-api.onrender.com';
-  static const String _defaultDevUrl = 'https://phytodoctor-api.onrender.com';
-  static const String _defaultProdUrl = 'https://phytodoctor-api.onrender.com';
 
   static String get apiBaseUrl {
     const definedUrl = String.fromEnvironment('API_URL');

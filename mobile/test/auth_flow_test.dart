@@ -1,12 +1,23 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 import 'package:phyto_doctor/core/models/user_model.dart';
 import 'package:phyto_doctor/core/services/auth_service.dart';
 
-class MockHttpClient extends Mock implements http.Client {}
+class MockHttpClient extends http.BaseClient {
+  final int statusCode;
+  final String body;
+  MockHttpClient({required this.statusCode, required this.body});
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    return http.StreamedResponse(
+      Stream.value(utf8.encode(body)),
+      statusCode,
+      headers: {'content-type': 'application/json'},
+    );
+  }
+}
 
 void main() {
   group('UserModel Role Validation Tests', () {
@@ -58,10 +69,12 @@ void main() {
   group('AuthService Security & Role Access Enforcement', () {
     test('Throws AuthException when employee attempts admin login', () async {
       // Mock client returning 403 Forbidden
-      final authService = AuthService(baseUrl: 'http://mock-server');
+      final mockClient = MockHttpClient(
+        statusCode: 403,
+        body: jsonEncode({'detail': 'Access denied: Employee accounts cannot access Administrator dashboard.'}),
+      );
+      final authService = AuthService(baseUrl: 'http://mock-server', client: mockClient);
       
-      // When backend rejects role with 403
-      // Verify AuthException is thrown with descriptive error
       expect(
         () async => await authService.login(
           usernameOrEmail: 'emp.john',
@@ -73,7 +86,11 @@ void main() {
     });
 
     test('Throws AuthException on invalid credentials (401)', () async {
-      final authService = AuthService(baseUrl: 'http://mock-server');
+      final mockClient = MockHttpClient(
+        statusCode: 401,
+        body: jsonEncode({'detail': 'Incorrect username/email or password.'}),
+      );
+      final authService = AuthService(baseUrl: 'http://mock-server', client: mockClient);
       expect(
         () async => await authService.login(
           usernameOrEmail: 'emp.john',
