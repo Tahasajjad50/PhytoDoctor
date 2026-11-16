@@ -140,7 +140,8 @@ async def get_employee_performance_summary(
 @router.get("/employee/{employee_id}/analytics", response_model=PerformanceAnalyticsResponse)
 async def get_employee_performance_analytics(
     employee_id: str,
-    timeframe: str = Query("DAILY", description="'DAILY', 'WEEKLY', or 'MONTHLY'"),
+    timeframe: Optional[str] = Query(None, description="'DAILY', 'WEEKLY', or 'MONTHLY'"),
+    period: Optional[str] = Query(None, description="Alias for timeframe ('DAILY', 'WEEKLY', 'MONTHLY')"),
     as_of_date: Optional[date] = Query(None, description="Anchor calendar date"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -152,6 +153,10 @@ async def get_employee_performance_analytics(
     - Personal visit history with supervisor review reasons.
     - Guarantees drafts, pending, and rejected visits do NOT inflate verified counts.
     """
+    effective_timeframe = (period or timeframe or "DAILY").upper()
+    if effective_timeframe not in ("DAILY", "WEEKLY", "MONTHLY"):
+        effective_timeframe = "DAILY"
+
     if current_user.role == UserRole.EMPLOYEE.value and current_user.id != employee_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
     if current_user.role == UserRole.MANAGER.value:
@@ -165,7 +170,7 @@ async def get_employee_performance_analytics(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found.")
 
     anchor_date = as_of_date or get_current_utc_date()
-    start_d, end_d, start_dt, end_dt = get_period_boundaries(anchor_date, timeframe)
+    start_d, end_d, start_dt, end_dt = get_period_boundaries(anchor_date, effective_timeframe)
 
     # 1. Target count computation
     target_query = select(EmployeeTarget).where(
@@ -178,9 +183,9 @@ async def get_employee_performance_analytics(
     
     # Scale daily target if timeframe is weekly or monthly
     base_target = target_record.target_count if target_record else 6
-    if timeframe.upper() == "WEEKLY":
+    if effective_timeframe == "WEEKLY":
         target_visits = base_target * 6  # 6-day work week
-    elif timeframe.upper() == "MONTHLY":
+    elif effective_timeframe == "MONTHLY":
         target_visits = base_target * 26 # 26-day work month
     else:
         target_visits = base_target
@@ -213,8 +218,8 @@ async def get_employee_performance_analytics(
     # 3. Generate Day-by-Day Trend Points
     trend_points: List[TrendPoint] = []
     # If daily, show past 7 days trend for immediate context; if weekly/monthly, show each day in period
-    trend_start = (anchor_date - timedelta(days=6)) if timeframe.upper() == "DAILY" else start_d
-    trend_end = anchor_date if timeframe.upper() == "DAILY" else end_d
+    trend_start = (anchor_date - timedelta(days=6)) if effective_timeframe == "DAILY" else start_d
+    trend_end = anchor_date if effective_timeframe == "DAILY" else end_d
 
     curr_day = trend_start
     while curr_day <= trend_end:
@@ -258,7 +263,7 @@ async def get_employee_performance_analytics(
     return PerformanceAnalyticsResponse(
         employee_id=employee.id,
         employee_name=employee.full_name,
-        timeframe=timeframe.upper(),
+        timeframe=effective_timeframe,
         start_date=start_d,
         end_date=end_d,
         target_visits=target_visits,

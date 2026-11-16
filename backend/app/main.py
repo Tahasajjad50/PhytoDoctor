@@ -27,6 +27,8 @@ async def _keep_alive_pinger():
 
 def _run_sqlite_column_migrations(conn):
     """Safely adds missing columns to existing SQLite tables if not present."""
+    if conn.dialect.name != "sqlite":
+        return
     try:
         res = conn.execute(text("PRAGMA table_info(users)")).fetchall()
         existing_cols = {row[1] for row in res}

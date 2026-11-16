@@ -22,6 +22,34 @@ class _AccountDirectoryScreenState extends State<AccountDirectoryScreen> {
   String? _errorMessage;
   String _searchQuery = '';
   final Set<String> _revealedPasswords = {};
+  final Map<String, String> _revealedPasswordValues = {};
+
+  Future<String?> _fetchRevealedPassword(String userId) async {
+    if (_revealedPasswordValues.containsKey(userId)) {
+      return _revealedPasswordValues[userId];
+    }
+    try {
+      final token = widget.currentUser.accessToken;
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/users/$userId/reveal-credential');
+      final response = await http.post(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final pwd = data['login_password'] as String?;
+        if (pwd != null) {
+          _revealedPasswordValues[userId] = pwd;
+          return pwd;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
 
   @override
   void initState() {
@@ -69,7 +97,13 @@ class _AccountDirectoryScreenState extends State<AccountDirectoryScreen> {
 
   void _shareAccountCredentials(CreatedAccountModel account) async {
     final portal = account.isManager ? 'Admin / Manager Portal' : 'Field Employee Portal';
-    final password = account.loginPassword ?? 'Contact Admin for reset';
+    String password = _revealedPasswordValues[account.id] ?? account.loginPassword ?? '••••••••';
+    if (password == '••••••••') {
+      final revealed = await _fetchRevealedPassword(account.id);
+      if (revealed != null) {
+        password = revealed;
+      }
+    }
     final shareText = '''
 🌿 PhytoDoctor App Access Credentials 🌿
 Portal: $portal
@@ -587,14 +621,26 @@ Phone: ${account.phone ?? 'N/A'}
                                                     mainAxisSize: MainAxisSize.min,
                                                     children: [
                                                       InkWell(
-                                                        onTap: () {
-                                                          setState(() {
-                                                            if (isPasswordRevealed) {
+                                                        onTap: () async {
+                                                          if (isPasswordRevealed) {
+                                                            setState(() {
                                                               _revealedPasswords.remove(acc.id);
-                                                            } else {
-                                                              _revealedPasswords.add(acc.id);
+                                                            });
+                                                          } else {
+                                                            if (!_revealedPasswordValues.containsKey(acc.id)) {
+                                                              final pwd = await _fetchRevealedPassword(acc.id);
+                                                              if (pwd != null && mounted) {
+                                                                setState(() {
+                                                                  _revealedPasswordValues[acc.id] = pwd;
+                                                                });
+                                                              }
                                                             }
-                                                          });
+                                                            if (mounted) {
+                                                              setState(() {
+                                                                _revealedPasswords.add(acc.id);
+                                                              });
+                                                            }
+                                                          }
                                                         },
                                                         child: Row(
                                                           mainAxisSize: MainAxisSize.min,
@@ -641,7 +687,7 @@ Phone: ${account.phone ?? 'N/A'}
                                                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: AppTheme.textMuted),
                                               ),
                                               Text(
-                                                'Password: ${isPasswordRevealed ? (acc.loginPassword ?? "••••••••") : "••••••••"}',
+                                                'Password: ${isPasswordRevealed ? (_revealedPasswordValues[acc.id] ?? acc.loginPassword ?? "••••••••") : "••••••••"}',
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   fontFamily: 'monospace',

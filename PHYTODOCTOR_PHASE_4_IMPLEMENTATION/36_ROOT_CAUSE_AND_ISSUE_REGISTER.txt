@@ -1,0 +1,116 @@
+================================================================================
+PHYTO DOCTOR - PHASE 4: ROOT CAUSE AND ISSUE REGISTER
+Document Reference: PHYTODOCTOR_PHASE_4_IMPLEMENTATION/36_ROOT_CAUSE_AND_ISSUE_REGISTER.txt
+Date: November 16, 2026
+Branch: phase-4-implementation
+Author: Principal Systems Architect & Senior QA Lead
+================================================================================
+
+1. ISSUE REGISTER SUMMARY TABLE
+--------------------------------------------------------------------------------
+ID    | Title                                      | Severity | Status
+------+--------------------------------------------+----------+-------------
+ISS-01| Server Address Leaked in Credential Share  | Medium   | RESOLVED
+ISS-02| Ephemeral Android Photo Cache Deletion     | Critical | RESOLVED
+ISS-03| Ephemeral Container SQLite Data Loss       | Critical | RESOLVED
+ISS-04| Unprotected Plaintext Credential Exposure   | High     | RESOLVED
+ISS-05| Distributed Worker Rate Limiter Isolation  | High     | RESOLVED
+ISS-06| SQLite PRAGMA Crash on PostgreSQL Startup  | High     | RESOLVED
+ISS-07| Performance Analytics Parameter Mismatch    | Medium   | RESOLVED
+ISS-08| Admin Web Origins Missing in CORS Policy   | Medium   | RESOLVED
+ISS-09| Cryptographic Secret Coupling & Lockout     | High     | RESOLVED
+ISS-10| Offline Storage Process-Crash Vulnerability| Critical | RESOLVED
+--------------------------------------------------------------------------------
+
+
+2. DETAILED ROOT CAUSE ANALYSES
+--------------------------------------------------------------------------------
+
+ISS-01: SERVER ADDRESS LEAKED IN CREDENTIAL SHARE
+- Description: Sharing employee account details from the mobile client included
+  "Server Address: https://phytodoctor-api.onrender.com" in the shared payload.
+- Root Cause: Mobile presentation code hardcoded the backend server address inside
+  the string template used by Share.share() in account_directory_screen.dart.
+- Impact: Unnecessary infrastructure disclosure, exposing API endpoints to
+  external scrutiny and credential sniffing.
+- Resolution: Removed the Server Address line entirely from the share template.
+
+ISS-02: EPHEMERAL ANDROID PHOTO CACHE DELETION
+- Description: Camera capture files were stored in context.cacheDir, causing
+  intermittent photo loss before sync.
+- Root Cause: MainActivity.kt generated photo capture files using context.cacheDir.
+  The Android operating system clears this directory automatically during memory
+  pressure or low storage conditions.
+- Impact: Agronomists lost evidence photos when working in remote rural zones with
+  delayed network synchronization.
+- Resolution: Migrated capture destination to context.filesDir ("evidence_photos")
+  and ensured PhotoStorageService persists captures into app-private documents.
+
+ISS-03: EPHEMERAL CONTAINER SQLITE DATA LOSS
+- Description: Render web service deployed with SQLite database file on container
+  disk, losing all user data on every container restart.
+- Root Cause: render.yaml configured DATABASE_URL as sqlite+aiosqlite:///./phyto_doctor.db
+  without defining a persistent managed database service.
+- Impact: Total data loss across restarts, wiping accounts, visits, and audit logs.
+- Resolution: Updated render.yaml and backend/render.yaml with a managed PostgreSQL
+  database blueprint and wired DATABASE_URL via fromDatabase connectionString.
+
+ISS-04: UNPROTECTED PLAINTEXT CREDENTIAL EXPOSURE
+- Description: Bulk account listings returned plain text passwords, visible to any
+  authorized viewer without an audit log.
+- Root Cause: UserResponse schema and users API returned assigned_password in clear
+  text on GET /users/created-accounts.
+- Impact: Increased insider threat risk and violation of credential privacy.
+- Resolution: Masked default listing output to "••••••••", added an audited on-demand
+  endpoint (POST /api/v1/users/{id}/reveal-credential), and recorded CREDENTIAL_REVEALED
+  audit events in audit_events.
+
+ISS-05: DISTRIBUTED WORKER RATE LIMITER ISOLATION
+- Description: Login rate limiting was held in memory per-process, allowing brute-force
+  bypasses across multiple Uvicorn workers.
+- Root Cause: LoginRateLimiter stored attempt timestamps in a standard Python
+  dict (_failures). In multi-worker production setups, workers share no memory.
+- Impact: Attackers could cycle through workers, exceeding the 5-attempt limit.
+- Resolution: Re-architected LoginRateLimiter to use cross-process SQLite storage
+  with WAL mode by default, and Redis sliding-window ZSETs when REDIS_URL is set.
+
+ISS-06: SQLITE PRAGMA CRASH ON POSTGRESQL STARTUP
+- Description: Backend startup crashed immediately when connected to PostgreSQL.
+- Root Cause: backend/app/main.py executed PRAGMA table_info(users) inside the
+  lifespan startup hook. PRAGMA is SQLite-specific syntax rejected by PostgreSQL.
+- Impact: Application could not start on managed PostgreSQL databases.
+- Resolution: Added dialect inspection gating (if conn.dialect.name != "sqlite": return).
+
+ISS-07: PERFORMANCE ANALYTICS PARAMETER MISMATCH
+- Description: Admin portal requested ?period=, causing HTTP 422 errors.
+- Root Cause: FastAPI endpoint strictly required timeframe: str = Query(...).
+- Impact: React Admin dashboard charts and employee analytics failed to load.
+- Resolution: Endpoint now accepts both timeframe and period (as an alias) and
+  resolves effective_timeframe = (period or timeframe or "DAILY").upper().
+
+ISS-08: ADMIN WEB ORIGINS MISSING IN CORS POLICY
+- Description: Web portal deployed on Firebase/Web App received CORS errors.
+- Root Cause: BACKEND_CORS_ORIGINS in backend/app/core/config.py lacked the
+  production web domain (https://phytodoctor-admin.web.app).
+- Impact: Cross-origin browser requests blocked in production.
+- Resolution: Added phytodoctor-admin.web.app and phytodoctor-admin.firebaseapp.com.
+
+ISS-09: CRYPTOGRAPHIC SECRET COUPLING & LOCKOUT
+- Description: Rotating JWT SECRET_KEY broke decryption of stored credentials.
+- Root Cause: Credential encryption key was derived via SHA-256 of JWT SECRET_KEY.
+- Impact: Key rotation rendered all existing encrypted employee passwords corrupt.
+- Resolution: Decoupled encryption with dedicated CREDENTIAL_ENCRYPTION_KEY, added
+  fallback multi-key decryption, and implemented versioned tokens ("v1:...").
+
+ISS-10: OFFLINE STORAGE PROCESS-CRASH VULNERABILITY
+- Description: Mobile offline visits risked corruption if the process was killed
+  mid-write to the JSON file.
+- Root Cause: Direct file overwrites without transactional guarantees or atomic
+  file replacement semantics.
+- Impact: Partial writes could permanently corrupt the offline visit queue.
+- Resolution: Integrated native SQLite engine via sqflite, backed by atomic
+  write-to-temporary and rename semantics with automated backup rollback (.bak).
+
+================================================================================
+END OF REPORT 36_ROOT_CAUSE_AND_ISSUE_REGISTER.txt
+================================================================================

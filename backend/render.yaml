@@ -1,3 +1,10 @@
+databases:
+  - name: phytodoctor-db
+    plan: free
+    region: oregon
+    databaseName: phytodoctor
+    user: phytodoctor_user
+
 services:
   - type: web
     name: phytodoctor-api
@@ -13,8 +20,12 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
+      - key: CREDENTIAL_ENCRYPTION_KEY
+        generateValue: true
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:///./phyto_doctor.db
+        fromDatabase:
+          name: phytodoctor-db
+          property: connectionString
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

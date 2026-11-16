@@ -106,3 +106,11 @@ class TransferSupervisorRequest(BaseModel):
     new_manager_id: Optional[str] = None
     notes: Optional[str] = None
 
+class RevealedCredentialResponse(BaseModel):
+    user_id: str
+    username: str
+    login_password: str
+    revealed_at: datetime
+    revealed_by: str
+
+

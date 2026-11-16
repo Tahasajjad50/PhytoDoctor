@@ -1,0 +1,77 @@
+================================================================================
+PHYTO DOCTOR - PHASE 4: PHOTO STORAGE AND UPLOAD VERIFICATION
+Document Reference: PHYTODOCTOR_PHASE_4_IMPLEMENTATION/41_PHOTO_STORAGE_AND_UPLOAD_VERIFICATION.txt
+Date: November 16, 2026
+Branch: phase-4-implementation
+Author: Principal Systems Architect & Senior QA Lead
+================================================================================
+
+1. PHOTO CAPTURE DURABILITY & LIFECYCLE
+--------------------------------------------------------------------------------
+Photographic crop evidence is the foundational record for disease diagnosis and
+visit verification in Phyto Doctor. Previous technical audits revealed a severe
+vulnerability where camera capture files were written to ephemeral cache directories.
+
+A. Resolution of Cache Deletion Vulnerability:
+  - In mobile/android/app/src/main/kotlin/com/phytodoctor/fieldapp/MainActivity.kt,
+    the camera intent output was updated from `context.cacheDir` to `context.filesDir`:
+    `val storageDir = File(context.filesDir, "evidence_photos")`
+  - In Android OS architecture, `filesDir` is permanent application-private storage.
+    The OS will never wipe this directory during low memory conditions.
+
+B. In-App Private Evidence Storage:
+  - In mobile/lib/core/storage/photo_storage_service.dart:
+    PhotoStorageService dynamically resolves `getApplicationDocumentsDirectory()`,
+    persisting photos under `app_flutter/private_evidence/`.
+  - Photos are renamed with deterministic UUID prefixes:
+    `{visit_id}_{original_filename}.jpg`
+
+
+2. INTEGRITY VERIFICATION & PRUNING RETENTION POLICY
+--------------------------------------------------------------------------------
+A. Pre-Upload Integrity Validation:
+  - Prior to initiating a Cloudinary upload, `verifyPhotoIntegrity()` validates:
+    1. File existence on the local filesystem.
+    2. File size exceeds minimum byte threshold (> 0 bytes).
+    3. File headers conform to valid JPEG/PNG formats.
+  - Corrupted or 0-byte photo files are rejected before wasting network bandwidth.
+
+B. Strict Retention Policy:
+  - Unsynced Photos: Unsynced local photos are strictly protected by a retention
+    guard (`Retention guard: Rejected deleting unsynced visit`). They are NEVER deleted.
+  - Synced Photo Pruning: `pruneOldSyncedPhotos()` allows purging locally cached
+    evidence ONLY if:
+    1. The visit has been confirmed synchronized to the backend (sync_status == "synced").
+    2. The photo URL has been stored in PostgreSQL.
+    3. The local file is older than 30 days.
+
+
+3. CLOUDINARY CLOUD INTEGRATION & SIGNED UPLOADS
+--------------------------------------------------------------------------------
+A. Backend Signed Upload Flow:
+  - Agronomist clients do not hold master Cloudinary API secrets.
+  - Mobile requests signed upload parameters from backend:
+    `POST /api/v1/media/signed-upload-params`
+  - Backend signs the timestamp and folder parameters using HMAC-SHA1 with
+    `CLOUDINARY_API_SECRET`.
+  - Mobile uploads directly to Cloudinary using the signature.
+  - Mobile associates the resulting secure URL and public ID with the field visit:
+    `POST /api/v1/media/confirm-photo-association`
+
+B. Quota & Cost Tracking:
+  - Backend route `GET /api/v1/media/usage-and-costs` tracks storage credits,
+    bandwidth consumption, and image counts to prevent Cloudinary plan overages.
+
+C. Backend Test Suite Results (backend/tests/test_cloudinary_integration.py):
+  1. Signed upload authorization security -> PASSED
+  2. Permission and visit scoping -> PASSED
+  3. Invalid file types and size rejection -> PASSED
+  4. Photo upload and PostgreSQL association -> PASSED
+  5. Photo association confirmation workflow -> PASSED
+  6. Secure photo access permissions -> PASSED
+  7. Cloudinary usage quota and cost estimation -> PASSED
+  Pass Rate: 7/7 tests passed (100%).
+
+================================================================================
+END OF REPORT 41_PHOTO_STORAGE_AND_UPLOAD_VERIFICATION.txt
+================================================================================

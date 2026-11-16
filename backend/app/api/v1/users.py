@@ -18,6 +18,7 @@ from app.schemas.user import (
     SupervisorOption,
     TransferSupervisorRequest,
     UpdateCredentialsRequest,
+    RevealedCredentialResponse,
     UserCreate,
     UserResponse,
     UserUpdate,
@@ -184,7 +185,7 @@ async def list_created_accounts(
                 created_at=user_obj.created_at,
                 created_by_id=user_obj.created_by_id,
                 created_by_name=creator_name or ("Executive Office (CEO)" if user_obj.created_by_id else "System Root"),
-                login_password=decrypt_credential(user_obj.assigned_password) or "••••••••",
+                login_password="••••••••",
             )
         )
     return items
@@ -567,8 +568,65 @@ async def update_account_credentials(
         created_at=target_user.created_at,
         created_by_id=target_user.created_by_id,
         created_by_name=creator_name or "System Administrator",
-        login_password=decrypt_credential(target_user.assigned_password) or "••••••••",
+        login_password="••••••••",
     )
+
+@router.post("/{user_id}/reveal-credential", response_model=RevealedCredentialResponse)
+async def reveal_user_credential(
+    user_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Secure, audited on-demand credential reveal endpoint.
+    Strict Authorization:
+      - OWNER (CEO) can reveal any employee/manager credential.
+      - MANAGER can only reveal credentials for employees they directly supervise
+        (manager_id == current_user.id) or employees they personally created (created_by_id == current_user.id).
+    Every reveal event is permanently recorded in the tamper-evident audit log.
+    """
+    res = await db.execute(select(User).where(User.id == user_id))
+    target_user = res.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User record not found.")
+
+    # Strict authorization enforcement
+    if current_user.role == UserRole.MANAGER.value:
+        is_supervisor = target_user.manager_id == current_user.id
+        is_creator = target_user.created_by_id == current_user.id
+        if not (is_supervisor or is_creator):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You are not authorized to view credentials for this user."
+            )
+
+    now_utc = datetime.now(timezone.utc)
+    decrypted_pwd = decrypt_credential(target_user.assigned_password) or "••••••••"
+
+    # Log security audit trail
+    await log_audit_event(
+        db=db,
+        action="CREDENTIAL_REVEALED",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        affected_record_id=target_user.id,
+        affected_record_type="User",
+        metadata={
+            "revealed_user_id": target_user.id,
+            "revealed_username": target_user.username,
+            "revealed_by_username": current_user.username,
+        },
+    )
+    await db.commit()
+
+    return RevealedCredentialResponse(
+        user_id=target_user.id,
+        username=target_user.username,
+        login_password=decrypted_pwd,
+        revealed_at=now_utc,
+        revealed_by=current_user.username,
+    )
+
 
 
 

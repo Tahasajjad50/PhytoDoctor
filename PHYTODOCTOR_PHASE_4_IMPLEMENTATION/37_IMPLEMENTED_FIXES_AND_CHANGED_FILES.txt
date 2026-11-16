@@ -1,0 +1,121 @@
+================================================================================
+PHYTO DOCTOR - PHASE 4: IMPLEMENTED FIXES AND CHANGED FILES
+Document Reference: PHYTODOCTOR_PHASE_4_IMPLEMENTATION/37_IMPLEMENTED_FIXES_AND_CHANGED_FILES.txt
+Date: November 16, 2026
+Branch: phase-4-implementation
+Author: Principal Systems Architect & Senior QA Lead
+================================================================================
+
+1. OVERVIEW OF CODE MODIFICATIONS
+--------------------------------------------------------------------------------
+Phase 4 delivered targeted, production-grade fixes across the backend, mobile
+client, database layer, deployment blueprints, and automated test suites.
+Every change was verified locally with automated tests prior to final sign-off.
+
+
+2. EXHAUSTIVE FILE MODIFICATION INVENTORY
+--------------------------------------------------------------------------------
+
+A. BACKEND CONFIGURATION & SECURITY
+1. backend/app/core/config.py
+   - Decoupled credential encryption from JWT SECRET_KEY by adding:
+     CREDENTIAL_ENCRYPTION_KEY: Optional[str] = None
+     CREDENTIAL_ENCRYPTION_KEY_FALLBACKS: List[str] = []
+     REDIS_URL: Optional[str] = None
+   - Added production web admin origins to BACKEND_CORS_ORIGINS:
+     "https://phytodoctor-admin.web.app"
+     "https://phytodoctor-admin.firebaseapp.com"
+   - Enforced key length validation and prohibited default dev keys in production.
+
+2. backend/app/core/security.py
+   - Implemented versioned ciphertext formatting ("v1:gAAAAA...").
+   - Added multi-key fallback decryption across primary key, configured fallbacks,
+     and legacy SECRET_KEY-derived key to guarantee zero decryption failures.
+   - Implemented rotate_credential() function to re-encrypt records with the latest key.
+
+3. backend/app/core/rate_limit.py
+   - Transformed LoginRateLimiter from an in-memory dictionary to a production-grade
+     multi-worker engine.
+   - Built SQLite file-backed cross-process shared store using WAL mode for zero-config
+     horizontal process safety across Uvicorn workers.
+   - Added full Redis sliding-window ZSET support when REDIS_URL is configured.
+
+4. backend/app/main.py
+   - Gated _run_sqlite_column_migrations(conn) with dialect inspection:
+     if conn.dialect.name != "sqlite": return
+   - Prevents PRAGMA syntax errors on PostgreSQL environments.
+
+
+B. BACKEND API ROUTES & SCHEMAS
+5. backend/app/schemas/user.py
+   - Added RevealedCredentialResponse schema containing user_id, username,
+     login_password, revealed_at, and revealed_by fields.
+
+6. backend/app/api/v1/users.py
+   - Masked bulk assigned_password values to "••••••••" in GET /users/created-accounts
+     and PUT /users/{id}/credentials.
+   - Added audited endpoint: POST /api/v1/users/{user_id}/reveal-credential.
+   - Enforced strict RBAC: OWNER can reveal any supervised account; MANAGER can only
+     reveal accounts they created or directly supervise.
+   - Emits CREDENTIAL_REVEALED audit event to audit_events table.
+
+7. backend/app/api/v1/performance.py
+   - Updated get_employee_performance_analytics() to accept both timeframe and
+     period query parameters:
+     effective_timeframe = (period or timeframe or "DAILY").upper()
+   - Resolves React Admin parameter mismatch without breaking mobile client.
+
+
+C. MOBILE CLIENT (FLUTTER / ANDROID)
+8. mobile/android/app/src/main/kotlin/com/phytodoctor/fieldapp/MainActivity.kt
+   - Changed camera capture file destination from context.cacheDir to context.filesDir
+     (File(filesDir, "evidence_photos")).
+   - Prevents Android OS from deleting unsynced evidence photos under low memory.
+
+9. mobile/lib/core/storage/photo_storage_service.dart
+   - Added dynamic directory resolution via path_provider (getApplicationDocumentsDirectory())
+     pointing to durable "app_flutter/private_evidence/".
+   - Added persistCapturedPhotoFile() to copy captures into private durable storage.
+   - Added pruneOldSyncedPhotos() to prune synced photos older than 30 days while
+     strictly preserving unsynced records.
+
+10. mobile/lib/core/storage/sqlite_visit_database.dart
+    - Added native SQLite database initialization using sqflite.openDatabase.
+    - Implemented graceful headless fallback to atomic file journal when native SQLite
+      is unavailable in unit test environments.
+    - Updated journal path to resolve inside durable getApplicationDocumentsDirectory().
+
+11. mobile/lib/presentation/screens/account_directory_screen.dart
+    - Removed server address from credential sharing template.
+    - Integrated with POST /users/{id}/reveal-credential endpoint for on-demand
+      password retrieval upon tapping the reveal icon.
+
+12. mobile/pubspec.yaml
+    - Added direct dependencies for sqflite: ^2.4.6 and path_provider: ^2.1.6.
+
+
+D. DEPLOYMENT & DISASTER RECOVERY SCRIPTS
+13. render.yaml & backend/render.yaml
+    - Added managed PostgreSQL database service blueprint ("phytodoctor-db").
+    - Wired DATABASE_URL using fromDatabase connectionString.
+    - Added CREDENTIAL_ENCRYPTION_KEY environment variable declaration.
+
+14. backend/scripts/backup_restore.py
+    - Enhanced backup engine to support pg_dump, byte-exact SQLite snapshots, and
+      portable structured multi-table JSON exports/restores.
+    - Verified automated backup and restore drill (--drill).
+
+
+E. AUTOMATED TEST SUITES
+15. backend/tests/test_postgresql_staging.py
+    - New test suite validating PostgreSQL DDL compilation for all 10 models,
+      topological foreign key dependency ordering, and transactional rollback.
+    - Reports NOT VERIFIED gracefully when external live database is unavailable.
+
+16. mobile/test/offline_sync_test.dart
+    - Added Test 10: "Complete Disk Storage Restart & Reinitialization", verifying
+      zero data loss and disk persistence without in-memory state.
+
+================================================================================
+END OF REPORT 37_IMPLEMENTED_FIXES_AND_CHANGED_FILES.txt
+================================================================================

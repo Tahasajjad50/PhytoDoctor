@@ -83,7 +83,8 @@ class MainActivity: FlutterActivity() {
                     }
 
                     try {
-                        val imageDir = File(cacheDir, "evidence_photos").apply { mkdirs() }
+                        // Use durable app-private filesDir (never wiped by Android cache cleaners during low memory)
+                        val imageDir = File(filesDir, "evidence_photos").apply { mkdirs() }
                         val imageFile = File(imageDir, "PHOTO_${System.currentTimeMillis()}.jpg")
                         currentPhotoPath = imageFile.absolutePath
 

@@ -54,33 +54,91 @@ def hash_refresh_token(token: str) -> str:
     """Hashes a refresh token using SHA-256 for safe database storage."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-def _get_fernet() -> Any:
+def _derive_fernet_key(raw_secret: str) -> bytes:
+    import base64
+    return base64.urlsafe_b64encode(hashlib.sha256(raw_secret.encode("utf-8")).digest())
+
+def _get_primary_fernet() -> Any:
     try:
         from cryptography.fernet import Fernet
-        import base64
-        key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest())
-        return Fernet(key)
+        secret = settings.CREDENTIAL_ENCRYPTION_KEY or settings.SECRET_KEY
+        return Fernet(_derive_fernet_key(secret))
     except Exception:
         return None
 
+def _get_fallback_fernets() -> list:
+    """Returns list of fallback Fernet instances for key rotation and backwards compatibility."""
+    fernets = []
+    try:
+        from cryptography.fernet import Fernet
+        # 1. Any explicitly configured rotation fallback keys
+        for fb_key in settings.CREDENTIAL_ENCRYPTION_KEY_FALLBACKS:
+            if fb_key:
+                fernets.append(Fernet(_derive_fernet_key(fb_key)))
+        # 2. Legacy fallback: SECRET_KEY-derived key (Phase 2 & Phase 3 baseline)
+        if settings.SECRET_KEY:
+            fernets.append(Fernet(_derive_fernet_key(settings.SECRET_KEY)))
+    except Exception:
+        pass
+    return fernets
+
+CURRENT_CREDENTIAL_KEY_VERSION = "v1"
+
 def encrypt_credential(plain_text: Optional[str]) -> Optional[str]:
-    """Encrypts sensitive assigned passwords using AES-128-CBC Fernet encryption for safe rest-storage."""
+    """
+    Encrypts sensitive assigned passwords using AES-128-CBC Fernet encryption with key version prefix.
+    Format: 'v1:<fernet_token>'
+    """
     if not plain_text:
         return None
-    fernet = _get_fernet()
+    fernet = _get_primary_fernet()
     if fernet is None:
         return plain_text
-    return fernet.encrypt(plain_text.encode("utf-8")).decode("utf-8")
+    cipher_bytes = fernet.encrypt(plain_text.encode("utf-8"))
+    return f"{CURRENT_CREDENTIAL_KEY_VERSION}:{cipher_bytes.decode('utf-8')}"
 
 def decrypt_credential(cipher_or_plain: Optional[str]) -> Optional[str]:
-    """Decrypts ciphertext credentials. Gracefully handles legacy plaintext credentials."""
+    """
+    Decrypts ciphertext credentials.
+    Supports:
+      - Versioned tokens: 'v1:gAAAAA...'
+      - Legacy unversioned tokens: 'gAAAAA...' (tries primary key then fallback keys)
+      - Plaintext fallback during initial bootstrap
+    """
     if not cipher_or_plain:
         return None
-    if cipher_or_plain.startswith("gAAAAA"):
-        fernet = _get_fernet()
-        if fernet is not None:
+
+    raw_cipher = cipher_or_plain
+    is_versioned = False
+    if cipher_or_plain.startswith("v1:"):
+        raw_cipher = cipher_or_plain[3:]
+        is_versioned = True
+
+    if raw_cipher.startswith("gAAAAA"):
+        # 1. Try primary Fernet instance
+        primary = _get_primary_fernet()
+        if primary is not None:
             try:
-                return fernet.decrypt(cipher_or_plain.encode("utf-8")).decode("utf-8")
+                return primary.decrypt(raw_cipher.encode("utf-8")).decode("utf-8")
             except Exception:
-                return "••••••••"
+                pass
+
+        # 2. Try rotation / legacy fallback Fernet instances
+        for fallback_fernet in _get_fallback_fernets():
+            try:
+                return fallback_fernet.decrypt(raw_cipher.encode("utf-8")).decode("utf-8")
+            except Exception:
+                continue
+
+        return "••••••••"
+
+    return cipher_or_plain
+
+def rotate_credential(cipher_or_plain: Optional[str]) -> Optional[str]:
+    """Re-encrypts a credential with the latest primary encryption key and version prefix."""
+    if not cipher_or_plain:
+        return None
+    decrypted = decrypt_credential(cipher_or_plain)
+    if decrypted and decrypted != "••••••••":
+        return encrypt_credential(decrypted)
     return cipher_or_plain

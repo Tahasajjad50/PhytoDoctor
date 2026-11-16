@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours for testing/dev
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7     # Secure refresh token strategy
+
+    # Independent Credential Data-at-Rest Encryption (Decoupled from JWT SECRET_KEY)
+    CREDENTIAL_ENCRYPTION_KEY: Optional[str] = "phyto_doctor_credential_key_dev_default_override_2026"
+    CREDENTIAL_ENCRYPTION_KEY_FALLBACKS: List[str] = []
+
+    # Distributed Rate Limiting (Redis URL, or database/file lock fallback)
+    REDIS_URL: Optional[str] = None
     
     # Database Configuration (PostgreSQL in production; SQLite for local testing)
     DATABASE_URL: str = "sqlite+aiosqlite:///./phyto_doctor.db"
@@ -33,7 +40,10 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
+        "http://localhost:8080",
         "https://phytodoctor-api.onrender.com",
+        "https://phytodoctor-admin.web.app",
+        "https://phytodoctor-admin.firebaseapp.com",
     ]
     
     # Cloudinary Image Storage (Optional in dev, configured in prod)
@@ -52,6 +62,10 @@ class Settings(BaseSettings):
                 raise ValueError("FATAL SECURITY VIOLATION: Production environment must configure SECRET_KEY in environment variables.")
             if len(self.SECRET_KEY.strip()) < 32:
                 raise ValueError("FATAL SECURITY VIOLATION: Production SECRET_KEY must be at least 32 characters (256-bit entropy).")
+            if self.CREDENTIAL_ENCRYPTION_KEY == "phyto_doctor_credential_key_dev_default_override_2026":
+                raise ValueError("FATAL SECURITY VIOLATION: Production environment must configure CREDENTIAL_ENCRYPTION_KEY in environment variables.")
+            if self.CREDENTIAL_ENCRYPTION_KEY and len(self.CREDENTIAL_ENCRYPTION_KEY.strip()) < 32:
+                raise ValueError("FATAL SECURITY VIOLATION: Production CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters (256-bit entropy).")
         return self
 
     

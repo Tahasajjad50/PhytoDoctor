@@ -402,5 +402,62 @@ void main() {
       db.setCustomJournalPath(null);
       await db.clearAll();
     });
+
+    test('10. Complete Disk Storage Restart & Reinitialization: Validates zero data loss without in-memory dependency', () async {
+      final diskTestFile = File('${Directory.systemTemp.path}/phytodoctor_restart_test_store.json');
+      if (diskTestFile.existsSync()) diskTestFile.deleteSync();
+      final bakFile = File('${diskTestFile.path}.bak');
+      if (bakFile.existsSync()) bakFile.deleteSync();
+
+      // Configure DB path
+      db.setCustomJournalPath(diskTestFile.path);
+      await db.clearAll();
+
+      final originalVisit = LocalVisitModel(
+        id: 'UUID-RESTART-010',
+        employeeId: 'EMP-RESTART',
+        clientName: 'Al-Hadeed Agro Traders',
+        clientPhone: '03451122334',
+        clientType: 'DEALER',
+        visitPurpose: 'Product Registration',
+        latitude: 30.1575,
+        longitude: 71.5249,
+        gpsAccuracy: 12.0,
+        isMockLocation: false,
+        deviceCaptureTime: DateTime.now().toUtc(),
+        localPhotoPath: '/data/user/0/com.phytodoctor/private_evidence/test_restart.jpg',
+        photoAssetId: 'PHOTO_RESTART_010',
+        syncState: VisitSyncState.syncing, // Simulate in-flight upload at moment of crash
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      // 1. Write to database (commits to physical disk)
+      await db.insertVisit(originalVisit);
+
+      // 2. Verify physical disk file exists and contains valid JSON bytes
+      expect(diskTestFile.existsSync(), isTrue);
+      final rawDiskBytes = diskTestFile.readAsStringSync();
+      expect(rawDiskBytes, contains('UUID-RESTART-010'));
+      expect(rawDiskBytes, contains('Al-Hadeed Agro Traders'));
+
+      // 3. Simulate total application termination and cold boot:
+      // Re-invoke loadFromDisk and resetStaleSyncingStates
+      await db.loadFromDisk();
+      await db.resetStaleSyncingStates();
+
+      // 4. Verify data survived and in-flight 'syncing' was safely recovered to 'pendingSync'
+      final postRestartVisit = await db.getVisitById('UUID-RESTART-010');
+      expect(postRestartVisit, isNotNull);
+      expect(postRestartVisit!.id, equals('UUID-RESTART-010'));
+      expect(postRestartVisit.clientName, equals('Al-Hadeed Agro Traders'));
+      expect(postRestartVisit.syncState, equals(VisitSyncState.pendingSync)); // Auto-recovered from stuck 'syncing'!
+      expect(postRestartVisit.syncError, contains('interrupted by app termination'));
+
+      // Clean up
+      db.setCustomJournalPath(null);
+      if (diskTestFile.existsSync()) diskTestFile.deleteSync();
+      if (bakFile.existsSync()) bakFile.deleteSync();
+    });
   });
 }
