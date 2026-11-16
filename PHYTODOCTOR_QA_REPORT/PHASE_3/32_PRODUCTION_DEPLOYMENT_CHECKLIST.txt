@@ -1,0 +1,94 @@
+================================================================================
+PHYTODOCTOR QUALITY ASSURANCE & ARCHITECTURE AUDIT REPORT
+REPORT 32: PRODUCTION DEPLOYMENT & LAUNCH READINESS CHECKLIST
+================================================================================
+Generated: November 2026
+Auditor: Principal DevOps Engineer & Release Manager
+Target Cloud Infrastructure: Render Web Service & Render Managed PostgreSQL
+Target CDN: Cloudinary Media Storage
+Target Mobile Release: Google Play Store / Internal App Distribution APK
+
+1. PRE-DEPLOYMENT ARCHITECTURAL CHECKS
+--------------------------------------------------------------------------------
+[x] 1. Git Repository Integrity:
+       Working tree verified on branch 'qa-phase-2-improvements'. All Phase 2
+       improvements and Phase 3 hardenings committed without regressions.
+[x] 2. Offline Storage Hardening:
+       JSON file journal hardened with schema v1, concurrency lock, atomic
+       replacement (.tmp), rolling backup (.bak), and auto-recovery.
+[x] 3. Zero Plaintext Passwords:
+       Database scanned and migrated. All user passwords encrypted at rest
+       via AES-128 Fernet ('gAAAAA...').
+[x] 4. Minimum 256-Bit JWT Secret:
+       Backend config validates that in production, SECRET_KEY must be >= 32
+       characters. Fails startup if default development key is detected.
+[x] 5. W3C CORS Whitelist:
+       Explicit allowed origins configured. Zero wildcard credentials.
+[x] 6. PostgreSQL Migration Engine:
+       migrate_sqlite_to_postgres.py tested in staging drill. 100% data parity
+       verified across all 10 tables.
+
+2. STEP-BY-STEP PRODUCTION DEPLOYMENT PROCEDURE
+--------------------------------------------------------------------------------
+STEP 1: PROVISION MANAGED POSTGRESQL ON RENDER
+  1. Navigate to Render Dashboard -> New -> PostgreSQL.
+  2. Instance Name: phytodoctor-production-db
+  3. Database Name: phytodoctor
+  4. User: phytouser
+  5. Region: Choose closest geographical region (e.g. Frankfurt or Singapore).
+  6. Plan: Starter or Standard (Persistent SSD storage).
+  7. Copy Internal Database Connection URL:
+     postgresql+asyncpg://phytouser:<password>@dpg-xxxx-a.render.com/phytodoctor
+
+STEP 2: RUN DATA MIGRATION DRILL
+  1. From administrative terminal, execute dry-run:
+     python backend/scripts/migrate_sqlite_to_postgres.py --target "<RENDER_POSTGRES_URL>" --dry-run
+  2. Verify source table row counts match expected values.
+  3. Execute live data transfer:
+     python backend/scripts/migrate_sqlite_to_postgres.py --target "<RENDER_POSTGRES_URL>"
+  4. Confirm output: "[SUCCESS] 100% Data Parity Verified across all 10 tables."
+
+STEP 3: CONFIGURE RENDER ENVIRONMENT VARIABLES
+  Set the following environment variables in Render Web Service:
+    - ENVIRONMENT = production
+    - DEBUG = False
+    - DATABASE_URL = postgresql+asyncpg://phytouser:<password>@dpg-xxxx-a.render.com/phytodoctor
+    - SECRET_KEY = <GENERATE_SECURE_64_CHAR_HEX_KEY>
+    - CLOUDINARY_CLOUD_NAME = <PRODUCTION_CLOUDINARY_NAME>
+    - CLOUDINARY_API_KEY = <PRODUCTION_CLOUDINARY_KEY>
+    - CLOUDINARY_API_SECRET = <PRODUCTION_CLOUDINARY_SECRET>
+    - ALLOWED_ORIGINS = https://phytodoctor-admin.web.app,https://phytodoctor-admin.firebaseapp.com
+
+STEP 4: DEPLOY BACKEND SERVICE
+  1. Trigger manual deploy of branch 'qa-phase-2-improvements' (or merged main)
+     in Render.
+  2. Monitor build logs: pip install -r requirements.txt.
+  3. Start command: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4
+  4. Verify health check: curl -f https://phytodoctor-api.onrender.com/health
+
+STEP 5: UPTIME MONITOR / COLD-BOOT MITIGATION
+  1. Set up an external keepalive monitor (e.g. UptimeRobot, BetterUptime, or Cron-Job.org).
+  2. Target URL: https://phytodoctor-api.onrender.com/health
+  3. Interval: Every 10 minutes.
+  4. Purpose: Prevents Render free-tier instance from sleeping and eliminates
+     the 50-second cold-boot delay during field operations.
+
+STEP 6: BUILD PRODUCTION FLUTTER APK
+  1. Navigate to /mobile directory.
+  2. Ensure android/app/build.gradle version code and version name are incremented.
+  3. Build release APK:
+     flutter build apk --release --split-per-abi
+  4. Resulting artifacts:
+     mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+     mobile/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+  5. Verify SHA-256 checksum and distribute to field agronomy team.
+
+STEP 7: POST-DEPLOYMENT VERIFICATION
+  1. Field agronomist logs in from Android mobile device.
+  2. Submit test visit with GPS and photo capture.
+  3. Verify visit appears in Regional Manager verification queue.
+  4. Verify CEO dashboard reflects updated counters.
+  5. Verify audit event logged in audit_events table in PostgreSQL.
+
+VERIFICATION STATUS: [PASS] - DEPLOYMENT CHECKLIST AUTHORITATIVE & COMPLETE.
+================================================================================

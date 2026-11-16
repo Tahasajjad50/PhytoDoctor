@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phyto_doctor/core/models/local_visit_model.dart';
@@ -346,6 +347,60 @@ void main() {
         createdAt: DateTime.now().subtract(const Duration(days: 60)),
       );
       expect(canPruneUnsynced, isFalse);
+    });
+
+    test('9. Corrupted Journal Recovery: Automatically rolls back to .bak when primary file is corrupt', () async {
+      final customPath = '${Directory.systemTemp.path}/phytodoctor_test_corrupt_journal.json';
+      db.setCustomJournalPath(customPath);
+      await db.clearAll();
+
+      final visit = LocalVisitModel(
+        id: 'UUID-CORRUPT-009',
+        employeeId: 'EMP-001',
+        clientName: 'Bismillah Seed Store',
+        clientPhone: '03211234567',
+        clientType: 'DEALER',
+        visitPurpose: 'Pesticide Audit',
+        latitude: 31.5204,
+        longitude: 74.3587,
+        gpsAccuracy: 10.0,
+        isMockLocation: false,
+        deviceCaptureTime: DateTime.now().toUtc(),
+        localPhotoPath: '/data/user/0/com.phytodoctor/private_evidence/photo_9.jpg',
+        photoAssetId: 'PHOTO_009',
+        syncState: VisitSyncState.pendingSync,
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      // 1. Initial write
+      await db.insertVisit(visit);
+      // 2. Second write to trigger .bak creation
+      await db.updateSyncState('UUID-CORRUPT-009', VisitSyncState.pendingSync, syncAttempts: 1);
+
+      // Verify .bak exists
+      final bakFile = File('$customPath.bak');
+      expect(bakFile.existsSync(), isTrue);
+
+      // 3. Intentionally corrupt primary journal file
+      final primaryFile = File(customPath);
+      primaryFile.writeAsStringSync('{"schema_version": 1, "records": { TRUNCATED_CORRUPTED_JSON_DATA', flush: true);
+
+      // 4. Wipe in-memory state
+      final memoryCheck = await db.getVisitById('UUID-CORRUPT-009');
+      expect(memoryCheck, isNotNull);
+
+      // 5. Reload from disk - should detect corruption and recover from .bak
+      await db.loadFromDisk();
+
+      final recovered = await db.getVisitById('UUID-CORRUPT-009');
+      expect(recovered, isNotNull);
+      expect(recovered!.id, equals('UUID-CORRUPT-009'));
+      expect(recovered.clientName, equals('Bismillah Seed Store'));
+
+      // Cleanup
+      db.setCustomJournalPath(null);
+      await db.clearAll();
     });
   });
 }

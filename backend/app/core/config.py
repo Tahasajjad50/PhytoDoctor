@@ -50,6 +50,8 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == "production":
             if self.SECRET_KEY == "phyto_doctor_jwt_secret_key_production_override_required_2026":
                 raise ValueError("FATAL SECURITY VIOLATION: Production environment must configure SECRET_KEY in environment variables.")
+            if len(self.SECRET_KEY.strip()) < 32:
+                raise ValueError("FATAL SECURITY VIOLATION: Production SECRET_KEY must be at least 32 characters (256-bit entropy).")
         return self
 
     

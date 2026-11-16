@@ -2,7 +2,7 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal, Base, engine
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, encrypt_credential
 from app.models.target import EmployeeTarget, TargetPeriod
 from app.models.user import User, UserRole
 from app.models.visit import FieldVisit, VisitStatus
@@ -39,7 +39,7 @@ async def seed_data():
                 email="mehmoodayyaz@phytodoctor.com",
                 username="MehmoodAyyaz",
                 hashed_password=get_password_hash("Admin@PhytoDoctor"),
-                assigned_password="Admin@PhytoDoctor",
+                assigned_password=encrypt_credential("Admin@PhytoDoctor"),
                 role=UserRole.OWNER.value,
                 is_active=True,
             ),
@@ -49,7 +49,7 @@ async def seed_data():
                 email="tahasajjad@phytodoctor.com",
                 username="admin.tahasajjad",
                 hashed_password=get_password_hash("Admin12345"),
-                assigned_password="Admin12345",
+                assigned_password=encrypt_credential("Admin12345"),
                 role=UserRole.MANAGER.value,
                 phone="03106733255",
                 designation="Software Developer",
@@ -62,7 +62,7 @@ async def seed_data():
                 email="salman@phytodoctor.com",
                 username="emp.salman",
                 hashed_password=get_password_hash("emp.salman123"),
-                assigned_password="emp.salman123",
+                assigned_password=encrypt_credential("emp.salman123"),
                 role=UserRole.EMPLOYEE.value,
                 designation="Agronomist",
                 manager_id="admin-taha-1",
@@ -75,7 +75,7 @@ async def seed_data():
                 email="muneeburrehman@phytodoctor.com",
                 username="emp.muneeb",
                 hashed_password=get_password_hash("muneeb123"),
-                assigned_password="muneeb123",
+                assigned_password=encrypt_credential("muneeb123"),
                 role=UserRole.EMPLOYEE.value,
                 phone="03056814088",
                 designation="Tester",
@@ -89,7 +89,7 @@ async def seed_data():
                 email="zainulabideen@phytodoctor.com",
                 username="emp.zain",
                 hashed_password=get_password_hash("Emp@Phyto123"),
-                assigned_password="Emp@Phyto123",
+                assigned_password=encrypt_credential("Emp@Phyto123"),
                 role=UserRole.EMPLOYEE.value,
                 phone="03266227772",
                 designation="Field Agronomist",

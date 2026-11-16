@@ -1,0 +1,82 @@
+================================================================================
+PHYTODOCTOR QUALITY ASSURANCE & ARCHITECTURE AUDIT REPORT
+REPORT 33: PRODUCTION RELEASE BLOCKERS & ARCHITECTURAL CONSTRAINTS
+================================================================================
+Generated: November 2026
+Auditor: Principal Software Architect & Application Reliability Auditor
+Scope: Pre-Production Go/No-Go Evaluation
+
+1. EXECUTIVE SUMMARY & RELEASE GATE EVALUATION
+--------------------------------------------------------------------------------
+The software codebase (Flutter Mobile Client, FastAPI Backend Service, and
+React Admin Console) has successfully passed all security hardening, offline
+resilience, regression, and end-to-end acceptance testing.
+
+However, moving from the current QA/Staging posture to full public production
+requires addressing five specific external, environmental, and infrastructure
+blockers documented below.
+
+RELEASE GATE STATUS: [CONDITIONAL GO]
+All code-level defects have been resolved. Production release is gated ONLY on
+cloud infrastructure provisioning and user authorization.
+
+2. CATALOG OF PRODUCTION RELEASE BLOCKERS
+--------------------------------------------------------------------------------
+BLOCKER 1: RENDER FREE-TIER EPHEMERAL STORAGE (CRITICAL INFRASTRUCTURE)
+  - Description: Render's free tier uses an ephemeral filesystem. If the container
+    restarts, redeploys, or sleeps, any changes written to local disk (including
+    phyto_doctor.db) are wiped clean.
+  - Required Action: Provision a managed PostgreSQL database instance on Render
+    and run 'backend/scripts/migrate_sqlite_to_postgres.py'.
+  - Severity: CRITICAL / BLOCKER for live production.
+
+BLOCKER 2: RENDER FREE-TIER COLD-BOOT DELAY (50 SECONDS)
+  - Description: Free web services on Render automatically spin down after
+    15 minutes of inactivity. When a field officer opens the app in the morning,
+    the initial request will experience a 50-second delay or timeout.
+  - Required Action: Either upgrade the Render web service to an 'Individual' or
+    'Starter' plan ($7/month) to keep it warm, or configure an external keepalive
+    ping service (e.g. UptimeRobot or Cron-Job.org hitting /health every 10 mins).
+  - Severity: HIGH / OPERATIONAL.
+
+BLOCKER 3: PRODUCTION JWT SECRET REPLACEMENT
+  - Description: The server configuration enforces that in production
+    (ENVIRONMENT != "development"), SECRET_KEY must have at least 256 bits of
+    entropy (>= 32 characters) and cannot be the default development string.
+  - Required Action: Generate a secure 64-character hex key (e.g. openssl rand -hex 32)
+    and configure it in the Render Web Service Environment dashboard.
+  - Severity: HIGH / SECURITY GATE.
+
+BLOCKER 4: PRODUCTION CLOUDINARY CREDENTIALS
+  - Description: The mobile app and backend media routes depend on Cloudinary for
+    storing field crop photos. Currently, development/test API keys or mock
+    responses are utilized in QA.
+  - Required Action: Verify that production Cloudinary credentials
+    (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) are active
+    and have sufficient storage and bandwidth quota for field operations.
+  - Severity: MEDIUM / OPERATIONAL.
+
+BLOCKER 5: USER EXPLICIT RELEASE APPROVAL (GOVERNANCE GATE)
+  - Description: As mandated by explicit architectural instructions:
+    "Do not deploy to Render or publish a new APK without my approval."
+  - Required Action: Present all Phase 3 findings, test suites, and audit reports
+    to the user for formal review and sign-off prior to publishing the release APK
+    or updating the live Render deployment.
+  - Severity: MANDATORY GOVERNANCE.
+
+3. ARCHITECTURAL CONSTRAINTS & OPERATING RECOMMENDATIONS
+--------------------------------------------------------------------------------
+1. Field Officer Phone Compatibility:
+   - Minimum supported Android version: Android 8.0 (API 26).
+   - Recommended: Android 11.0 (API 30) or newer with 3GB+ RAM and dedicated GPS.
+2. Agricultural Remote Connectivity:
+   - Field agronomists frequently operate in deep rural zones with intermittent
+     EDGE/2G connectivity. The app's offline file-backed journal ensures that
+     field visits and photographs can be collected throughout the day without
+     requiring real-time cellular data.
+3. Supervisor Verification Protocol:
+   - Visits flagged for poor GPS accuracy (> 50m) must be reviewed by the
+     Regional Manager in the verification queue before being marked verified.
+
+VERIFICATION STATUS: [REVIEW REQUIRED] - 5 PRE-DEPLOYMENT BLOCKERS CATALOGED.
+================================================================================
