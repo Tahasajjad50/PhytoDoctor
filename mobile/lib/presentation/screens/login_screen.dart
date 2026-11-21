@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../core/config/app_config.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/storage/secure_storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/phyto_logo.dart';
 import 'admin_dashboard_screen.dart';
@@ -83,6 +85,16 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
         portal: isAdminPortal ? 'admin' : 'employee',
       );
+
+      // Persist session across app restarts (auto-reopen without re-entering credentials)
+      try {
+        final storage = SecureStorageService();
+        await storage.saveUserSession(user);
+        await storage.saveStoredBuildNumber(AppConfig.buildNumber);
+        if (user.accessToken != null) {
+          await storage.saveTokens(accessToken: user.accessToken!);
+        }
+      } catch (_) {}
 
       if (!mounted) return;
 

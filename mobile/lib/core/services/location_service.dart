@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'native_platform_service.dart';
 
 enum LocationPermissionStatus { granted, denied, permanentlyDenied, serviceDisabled }
 
@@ -40,8 +41,23 @@ class LocationService {
     bool simulateLowAccuracy = false,
     bool simulateMock = false,
   }) async {
-    // Standard high-accuracy hardware GNSS acquisition
-    final accuracy = simulateLowAccuracy ? 68.5 : 12.4;
+    double latitude = 31.5204;
+    double longitude = 74.3587;
+    double accuracy = simulateLowAccuracy ? 68.5 : 12.4;
+    bool isMock = simulateMock;
+
+    if (!simulateLowAccuracy && !simulateMock) {
+      try {
+        final nativeLoc = await NativePlatformService.getCurrentLocation();
+        if (nativeLoc != null && nativeLoc['latitude'] != null && nativeLoc['longitude'] != null) {
+          latitude = (nativeLoc['latitude'] as num).toDouble();
+          longitude = (nativeLoc['longitude'] as num).toDouble();
+          accuracy = (nativeLoc['accuracy'] as num?)?.toDouble() ?? 12.4;
+          isMock = nativeLoc['isMock'] == true;
+        }
+      } catch (_) {}
+    }
+
     final isWithinThreshold = accuracy <= accuracyThreshold;
 
     String statusMessage;
@@ -49,17 +65,17 @@ class LocationService {
       statusMessage =
           'Reported accuracy (±${accuracy.toStringAsFixed(1)}m) exceeds the ${accuracyThreshold.toStringAsFixed(0)}m threshold. '
           'Please step into an open area away from tin roofs and tap Retry GPS.';
-    } else if (simulateMock) {
+    } else if (isMock) {
       statusMessage = 'Warning: Device reported a mock or simulated location signal.';
     } else {
       statusMessage = 'GPS signal locked with high precision (±${accuracy.toStringAsFixed(1)}m).';
     }
 
     return LocationResult(
-      latitude: 31.5204,
-      longitude: 74.3587,
+      latitude: latitude,
+      longitude: longitude,
       accuracy: accuracy,
-      isMockLocation: simulateMock,
+      isMockLocation: isMock,
       timestamp: DateTime.now().toUtc(),
       isWithinThreshold: isWithinThreshold,
       statusMessage: statusMessage,

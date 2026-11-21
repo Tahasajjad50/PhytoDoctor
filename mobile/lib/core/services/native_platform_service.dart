@@ -23,6 +23,16 @@ class NativePlatformService {
     }
   }
 
+  /// Obtains live GNSS GPS location directly from Android hardware sensor
+  static Future<Map<String, dynamic>?> getCurrentLocation() async {
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>('getCurrentLocation');
+      return res;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Opens the native device hardware camera to capture a real photo
   /// Returns the absolute local file path of the captured photo, or null if cancelled
   static Future<String?> capturePhoto() async {

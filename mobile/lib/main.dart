@@ -10,9 +10,19 @@ import 'presentation/screens/portal_selection_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inspect existing saved session
   final storage = SecureStorageService();
-  final savedUser = await storage.getUserSession();
+  final lastBuildNumber = await storage.getStoredBuildNumber();
+  UserModel? savedUser;
+
+  // Requirement: Reopen without asking credentials unless app was updated or reinstalled
+  if (lastBuildNumber == null || lastBuildNumber != AppConfig.buildNumber) {
+    // New version or fresh install -> require fresh authentication
+    await storage.clearAll();
+    savedUser = null;
+  } else {
+    // Normal reopen -> auto-reopen without credentials prompt
+    savedUser = await storage.getUserSession();
+  }
 
   runApp(PhytoDoctorApp(initialUser: savedUser));
 }

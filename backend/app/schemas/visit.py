@@ -39,6 +39,7 @@ class VisitResponse(BaseModel):
     id: str
     employee_id: str
     employee_name: Optional[str] = None
+    officer: Optional[str] = None
     client_name: str
     client_phone: Optional[str] = None
     notes: Optional[str] = None

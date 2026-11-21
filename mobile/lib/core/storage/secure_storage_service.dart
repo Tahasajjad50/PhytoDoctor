@@ -6,6 +6,7 @@ class SecureStorageService {
   static const String _keyAccessToken = 'phyto_access_token';
   static const String _keyRefreshToken = 'phyto_refresh_token';
   static const String _keyUserData = 'phyto_user_data';
+  static const String _keyAppBuildNumber = 'phyto_app_build_number';
 
   final FlutterSecureStorage _storage;
   // In-memory fallback for test harnesses or environments where native keychain is unavailable
@@ -71,6 +72,28 @@ class SecureStorageService {
       } catch (_) {
         return null;
       }
+    }
+    return null;
+  }
+
+  Future<void> saveStoredBuildNumber(int buildNumber) async {
+    _memoryCache[_keyAppBuildNumber] = buildNumber.toString();
+    try {
+      await _storage.write(key: _keyAppBuildNumber, value: buildNumber.toString());
+    } catch (_) {}
+  }
+
+  Future<int?> getStoredBuildNumber() async {
+    String? val = _memoryCache[_keyAppBuildNumber];
+    if (val == null) {
+      try {
+        val = await _storage.read(key: _keyAppBuildNumber);
+      } catch (_) {
+        val = null;
+      }
+    }
+    if (val != null) {
+      return int.tryParse(val);
     }
     return null;
   }

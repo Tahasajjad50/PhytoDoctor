@@ -2,9 +2,16 @@ package com.phytodoctor.fieldapp
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.Looper
 import android.provider.MediaStore
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
@@ -104,6 +111,76 @@ class MainActivity: FlutterActivity() {
                         startActivityForResult(cameraIntent, CAMERA_REQUEST_CODE)
                     } catch (e: Exception) {
                         result.error("CAMERA_ERROR", e.message, null)
+                    }
+                }
+                "getCurrentLocation" -> {
+                    val fineGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    val coarseGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+                    if (!fineGranted && !coarseGranted) {
+                        result.error("PERMISSION_DENIED", "Location permission not granted", null)
+                        return@MethodCallHandler
+                    }
+
+                    try {
+                        val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+                        var bestLocation: Location? = null
+
+                        for (provider in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)) {
+                            try {
+                                if (locationManager.isProviderEnabled(provider)) {
+                                    val loc = locationManager.getLastKnownLocation(provider)
+                                    if (loc != null) {
+                                        if (bestLocation == null || (loc.hasAccuracy() && loc.accuracy < (bestLocation?.accuracy ?: Float.MAX_VALUE))) {
+                                            bestLocation = loc
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) {}
+                        }
+
+                        if (bestLocation != null) {
+                            val isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                bestLocation.isMock
+                            } else {
+                                @Suppress("DEPRECATION")
+                                bestLocation.isFromMockProvider
+                            }
+                            result.success(mapOf(
+                                "latitude" to bestLocation.latitude,
+                                "longitude" to bestLocation.longitude,
+                                "accuracy" to (if (bestLocation.hasAccuracy()) bestLocation.accuracy.toDouble() else 15.0),
+                                "isMock" to isMock,
+                                "provider" to (bestLocation.provider ?: "gps")
+                            ))
+                        } else {
+                            val listener = object : LocationListener {
+                                override fun onLocationChanged(loc: Location) {
+                                    locationManager.removeUpdates(this)
+                                    val isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) loc.isMock else loc.isFromMockProvider
+                                    result.success(mapOf(
+                                        "latitude" to loc.latitude,
+                                        "longitude" to loc.longitude,
+                                        "accuracy" to (if (loc.hasAccuracy()) loc.accuracy.toDouble() else 15.0),
+                                        "isMock" to isMock,
+                                        "provider" to (loc.provider ?: "gps")
+                                    ))
+                                }
+                                @Deprecated("Deprecated in Java")
+                                override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
+                                override fun onProviderEnabled(p: String) {}
+                                override fun onProviderDisabled(p: String) {}
+                            }
+                            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                                locationManager.requestSingleUpdate(LocationManager.GPS_PROVIDER, listener, Looper.getMainLooper())
+                            } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                                locationManager.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, listener, Looper.getMainLooper())
+                            } else {
+                                result.error("LOCATION_UNAVAILABLE", "No location providers enabled on device", null)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        result.error("LOCATION_ERROR", e.message, null)
                     }
                 }
                 else -> result.notImplemented()

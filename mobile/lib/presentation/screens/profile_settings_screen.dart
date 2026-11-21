@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/user_model.dart';
+import '../../core/storage/secure_storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'portal_selection_screen.dart';
 
@@ -28,7 +29,9 @@ class ProfileSettingsScreen extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              await SecureStorageService().clearAll();
+              if (!context.mounted) return;
               Navigator.pop(context);
               Navigator.pushAndRemoveUntil(
                 context,

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
@@ -165,50 +166,109 @@ class VisitDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Container(
-                      height: 200,
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E2820),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: AppTheme.sageBorder),
-                      ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: GestureDetector(
+                        onTap: () {
+                          final photoUrl = visit['photo_url']?.toString();
+                          final localPath = visit['local_photo_path']?.toString();
+                          _showFullScreenImage(context, photoUrl, localPath, photoId, accuracy);
+                        },
+                        child: Container(
+                          height: 240,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E2820),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.sageBorder),
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
                             children: [
-                              const Icon(Icons.photo_camera_back, size: 48, color: Colors.white54),
-                              const SizedBox(height: 8),
-                              Text(
-                                photoId,
-                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              // 1. Live Cloudinary photo or local captured file
+                              Builder(builder: (context) {
+                                final photoUrl = visit['photo_url']?.toString();
+                                final localPath = visit['local_photo_path']?.toString();
+                                final hasNetwork = photoUrl != null && photoUrl.startsWith('http');
+                                final hasLocal = localPath != null && localPath.isNotEmpty && File(localPath).existsSync();
+
+                                if (hasNetwork) {
+                                  return Image.network(
+                                    photoUrl,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder: (context, child, progress) {
+                                      if (progress == null) return child;
+                                      return const Center(
+                                        child: CircularProgressIndicator(color: AppTheme.cropGreen),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      if (hasLocal) {
+                                        return Image.file(File(localPath), fit: BoxFit.cover);
+                                      }
+                                      return _buildFallbackPhotoPlaceholder(photoId, accuracy);
+                                    },
+                                  );
+                                } else if (hasLocal) {
+                                  return Image.file(File(localPath), fit: BoxFit.cover);
+                                } else {
+                                  return _buildFallbackPhotoPlaceholder(photoId, accuracy);
+                                }
+                              }),
+
+                              // 2. Tap to zoom hint at top right
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.65),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: const [
+                                      Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Tap to Zoom',
+                                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Watermark Embedded • Authenticated Shutter',
-                                style: TextStyle(color: Colors.white70, fontSize: 11),
+
+                              // 3. Authenticated Shutter watermark overlay banner at bottom
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  color: Colors.black.withOpacity(0.72),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          photoId,
+                                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Text(
+                                        'GPS ACCURACY: ±$accuracy',
+                                        style: const TextStyle(color: Color(0xFF81C784), fontSize: 11, fontWeight: FontWeight.w700),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ],
                           ),
-                          Positioned(
-                            bottom: 8,
-                            left: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              color: Colors.black.withOpacity(0.7),
-                              child: Text(
-                                'GPS ACCURACY: ±$accuracy',
-                                style: const TextStyle(
-                                  color: Color(0xFF81C784),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ],
@@ -339,6 +399,73 @@ class VisitDetailScreen extends StatelessWidget {
 
               const SizedBox(height: 24),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFallbackPhotoPlaceholder(String photoId, dynamic accuracy) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.photo_camera_back, size: 48, color: Colors.white54),
+          const SizedBox(height: 8),
+          Text(
+            photoId,
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Watermark Embedded • Authenticated Shutter',
+            style: TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullScreenImage(
+    BuildContext context,
+    String? photoUrl,
+    String? localPath,
+    String photoId,
+    dynamic accuracy,
+  ) {
+    final hasNetwork = photoUrl != null && photoUrl.startsWith('http');
+    final hasLocal = localPath != null && localPath.isNotEmpty && File(localPath).existsSync();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+            title: Text(photoId, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: hasNetwork
+                  ? Image.network(
+                      photoUrl!,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, progress) => progress == null
+                          ? child
+                          : const Center(child: CircularProgressIndicator(color: AppTheme.cropGreen)),
+                      errorBuilder: (context, error, stackTrace) => hasLocal
+                          ? Image.file(File(localPath!), fit: BoxFit.contain)
+                          : _buildFallbackPhotoPlaceholder(photoId, accuracy),
+                    )
+                  : (hasLocal
+                      ? Image.file(File(localPath!), fit: BoxFit.contain)
+                      : _buildFallbackPhotoPlaceholder(photoId, accuracy)),
+            ),
           ),
         ),
       ),

@@ -114,8 +114,17 @@ async def upload_visit_photo(
     """
     Direct secure upload endpoint: Validates file magic bytes and size,
     transfers to Cloudinary, and associates the asset ID in PostgreSQL.
+    Supports both offline-first (upload photo before visit entity commit)
+    and online visit associations.
     """
-    visit = await get_and_authorize_visit(visit_id, current_user, db)
+    # Check if visit already exists in DB
+    res = await db.execute(select(FieldVisit).where(FieldVisit.id == visit_id))
+    visit = res.scalar_one_or_none()
+    if visit and current_user.role == UserRole.EMPLOYEE.value and visit.employee_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You can only upload photo evidence for your own field visits.",
+        )
 
     # 1. Read file bytes
     file_bytes = await file.read()
@@ -124,54 +133,54 @@ async def upload_visit_photo(
     upload_result = await CloudinaryService.upload_photo_file(
         file_bytes=file_bytes,
         employee_id=current_user.id,
-        visit_id=visit.id,
+        visit_id=visit_id,
         filename=file.filename,
-        date_tag=visit.device_capture_time or datetime.now(timezone.utc),
+        date_tag=(visit.device_capture_time if visit else datetime.now(timezone.utc)),
     )
-
 
     now_utc = datetime.now(timezone.utc)
     metadata_json = json.dumps({
-        "width": upload_result["width"],
-        "height": upload_result["height"],
-        "bytes_size": upload_result["bytes_size"],
-        "format": upload_result["format"],
-        "version": upload_result["version"],
-        "thumbnail_url": upload_result["thumbnail_url"],
+        "width": upload_result.get("width"),
+        "height": upload_result.get("height"),
+        "bytes_size": upload_result.get("bytes_size"),
+        "format": upload_result.get("format"),
+        "version": upload_result.get("version"),
+        "thumbnail_url": upload_result.get("thumbnail_url"),
     })
 
-    # 3. Associate with FieldVisit in PostgreSQL
-    visit.photo_asset_id = upload_result["photo_asset_id"]
-    visit.photo_url = upload_result["photo_url"]
-    visit.photo_metadata = metadata_json
-    visit.photo_uploaded_at = now_utc
+    # 3. Associate with FieldVisit in PostgreSQL if visit entity exists
+    if visit:
+        visit.photo_asset_id = upload_result["photo_asset_id"]
+        visit.photo_url = upload_result["photo_url"]
+        visit.photo_metadata = metadata_json
+        visit.photo_uploaded_at = now_utc
 
-    await log_audit_event(
-        db=db,
-        action="MEDIA_PHOTO_UPLOADED",
-        actor_id=current_user.id,
-        actor_role=current_user.role,
-        affected_record_id=visit.id,
-        affected_record_type="FieldVisit",
-        metadata={
-            "photo_asset_id": upload_result["photo_asset_id"],
-            "bytes": upload_result["bytes_size"],
-            "format": upload_result["format"],
-        },
-    )
-    await db.commit()
-    await db.refresh(visit)
+        await log_audit_event(
+            db=db,
+            action="MEDIA_PHOTO_UPLOADED",
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            affected_record_id=visit.id,
+            affected_record_type="FieldVisit",
+            metadata={
+                "photo_asset_id": upload_result["photo_asset_id"],
+                "bytes": upload_result["bytes_size"],
+                "format": upload_result["format"],
+            },
+        )
+        await db.commit()
+        await db.refresh(visit)
 
     return PhotoMetadataResponse(
-        visit_id=visit.id,
-        photo_asset_id=visit.photo_asset_id,
-        photo_url=visit.photo_url,
+        visit_id=visit_id,
+        photo_asset_id=upload_result["photo_asset_id"],
+        photo_url=upload_result["photo_url"],
         thumbnail_url=upload_result["thumbnail_url"],
-        preview_url=CloudinaryService.get_optimized_view_url(visit.photo_asset_id),
-        bytes_size=upload_result["bytes_size"],
-        width=upload_result["width"],
-        height=upload_result["height"],
-        format=upload_result["format"],
+        preview_url=upload_result.get("preview_url") or CloudinaryService.get_optimized_view_url(upload_result["photo_asset_id"]),
+        bytes_size=upload_result.get("bytes_size"),
+        width=upload_result.get("width"),
+        height=upload_result.get("height"),
+        format=upload_result.get("format"),
         is_confirmed=True,
         uploaded_at=now_utc,
     )
@@ -187,7 +196,13 @@ async def confirm_photo_association(
     Confirms association between a client-uploaded Cloudinary asset and the visit in PostgreSQL.
     Guarantees record integrity before the mobile app marks the visit as 'Synced'.
     """
-    visit = await get_and_authorize_visit(visit_id, current_user, db)
+    res = await db.execute(select(FieldVisit).where(FieldVisit.id == visit_id))
+    visit = res.scalar_one_or_none()
+    if visit and current_user.role == UserRole.EMPLOYEE.value and visit.employee_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You can only modify your own visit photo records.",
+        )
 
     now_utc = datetime.now(timezone.utc)
     meta = {
@@ -198,32 +213,33 @@ async def confirm_photo_association(
         "version": req.version,
     }
 
-    visit.photo_asset_id = req.photo_asset_id.strip()
-    visit.photo_url = req.photo_url.strip()
-    visit.photo_metadata = json.dumps(meta)
-    visit.photo_uploaded_at = now_utc
+    if visit:
+        visit.photo_asset_id = req.photo_asset_id.strip()
+        visit.photo_url = req.photo_url.strip()
+        visit.photo_metadata = json.dumps(meta)
+        visit.photo_uploaded_at = now_utc
 
-    await log_audit_event(
-        db=db,
-        action="MEDIA_PHOTO_CONFIRMED",
-        actor_id=current_user.id,
-        actor_role=current_user.role,
-        affected_record_id=visit.id,
-        affected_record_type="FieldVisit",
-        metadata={
-            "photo_asset_id": visit.photo_asset_id,
-            "photo_url": visit.photo_url,
-        },
-    )
-    await db.commit()
-    await db.refresh(visit)
+        await log_audit_event(
+            db=db,
+            action="MEDIA_PHOTO_CONFIRMED",
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            affected_record_id=visit.id,
+            affected_record_type="FieldVisit",
+            metadata={
+                "photo_asset_id": visit.photo_asset_id,
+                "photo_url": visit.photo_url,
+            },
+        )
+        await db.commit()
+        await db.refresh(visit)
 
     return PhotoMetadataResponse(
-        visit_id=visit.id,
-        photo_asset_id=visit.photo_asset_id,
-        photo_url=visit.photo_url,
-        thumbnail_url=CloudinaryService.get_thumbnail_url(visit.photo_asset_id),
-        preview_url=CloudinaryService.get_optimized_view_url(visit.photo_asset_id),
+        visit_id=visit_id,
+        photo_asset_id=req.photo_asset_id.strip(),
+        photo_url=req.photo_url.strip(),
+        thumbnail_url=CloudinaryService.get_thumbnail_url(req.photo_asset_id.strip()),
+        preview_url=CloudinaryService.get_optimized_view_url(req.photo_asset_id.strip()),
         bytes_size=req.bytes_size,
         width=req.width,
         height=req.height,

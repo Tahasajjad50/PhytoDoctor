@@ -63,9 +63,10 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
     super.initState();
     _locationService = LocationService(accuracyThreshold: widget.accuracyThreshold);
     _repository = widget.repository ?? RealVisitRepository();
-    // Auto-prompt runtime permissions (Camera & Location) upon entering visit recording
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      NativePlatformService.requestPermissions();
+    // Auto-prompt runtime permissions (Camera & Location) and acquire live GPS lock
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await NativePlatformService.requestPermissions();
+      _retryGps();
     });
   }
 
@@ -134,6 +135,8 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
         _deviceCapturedAt = now;
         _photoAssetId = 'PHOTO_${now.millisecondsSinceEpoch}_${widget.user.id.replaceAll("-", "").substring(0, 8)}';
       });
+      // Ensure real hardware location is locked at the moment of photo capture
+      _retryGps();
     }
   }
 

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
@@ -190,7 +190,7 @@ async def list_visits(
 
     query = (
         select(FieldVisit, User.full_name.label("employee_name"))
-        .outerjoin(User, FieldVisit.employee_id == User.id)
+        .outerjoin(User, or_(FieldVisit.employee_id == User.id, FieldVisit.employee_id == User.username))
     )
     # Re-apply filters on join query
     if current_user.role == UserRole.EMPLOYEE.value:
@@ -237,7 +237,7 @@ async def get_visit_details(
 ):
     res = await db.execute(
         select(FieldVisit, User.full_name.label("employee_name"))
-        .outerjoin(User, FieldVisit.employee_id == User.id)
+        .outerjoin(User, or_(FieldVisit.employee_id == User.id, FieldVisit.employee_id == User.username))
         .where(FieldVisit.id == visit_id)
     )
     row = res.first()
@@ -293,7 +293,8 @@ async def verify_or_reject_visit(
     await db.commit()
     await db.refresh(visit)
     v_resp = VisitResponse.model_validate(visit)
-    emp = await db.get(User, visit.employee_id)
+    emp_res = await db.execute(select(User).where(or_(User.id == visit.employee_id, User.username == visit.employee_id)))
+    emp = emp_res.scalar_one_or_none()
     v_resp.employee_name = emp.full_name if emp else "Field Agronomist"
     v_resp.officer = emp.full_name if emp else "Field Agronomist"
     return v_resp

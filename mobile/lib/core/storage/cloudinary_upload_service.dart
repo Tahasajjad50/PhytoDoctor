@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
+import '../services/auth_service.dart';
 import 'photo_storage_service.dart';
 
 class CloudinaryUploadAuth {
@@ -85,13 +86,15 @@ class CloudinaryUploadService {
 
   final PhotoStorageService _storageService = PhotoStorageService();
 
+  String get _baseUrl => AuthService.defaultBaseUrl.isNotEmpty ? AuthService.defaultBaseUrl : AppConfig.apiBaseUrl;
+
   /// Step 3: Request upload authorization when online
   /// Never exposes Cloudinary API secret to mobile client
   Future<CloudinaryUploadAuth> requestUploadAuthorization({
     required String visitId,
     required String token,
   }) async {
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/v1/media/visits/$visitId/photo-upload-authorization');
+    final uri = Uri.parse('$_baseUrl/api/v1/media/visits/$visitId/photo-upload-authorization');
     final response = await http.post(
       uri,
       headers: {
@@ -125,7 +128,7 @@ class CloudinaryUploadService {
       debugPrint('[CloudinaryUploadService] Warning: Local photo file not found at $localPhotoPath, using fallback buffer.');
     }
 
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/v1/media/visits/$visitId/photo');
+    final uri = Uri.parse('$_baseUrl/api/v1/media/visits/$visitId/photo');
     final request = http.MultipartRequest('POST', uri);
     request.headers['Authorization'] = 'Bearer $token';
 
@@ -146,7 +149,7 @@ class CloudinaryUploadService {
       request.files.add(http.MultipartFile.fromBytes('file', dummyJpeg, filename: 'visit_$visitId.jpg'));
     }
 
-    final streamedResponse = await request.send();
+    final streamedResponse = await request.send().timeout(const Duration(seconds: 35));
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 201 || response.statusCode == 200) {

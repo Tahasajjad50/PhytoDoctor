@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/storage/secure_storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'account_directory_screen.dart';
 import 'chat_list_screen.dart';
@@ -270,7 +272,9 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: AppTheme.alertCrimson),
             tooltip: 'Sign Out',
-            onPressed: () {
+            onPressed: () async {
+              await SecureStorageService().clearAll();
+              if (!context.mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (context) => const PortalSelectionScreen()),
@@ -523,6 +527,73 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                             style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                           ),
                           const SizedBox(height: 6),
+
+                          // Photo preview thumbnail for supervisor inspection
+                          Builder(builder: (context) {
+                            final pUrl = audit['photo_url']?.toString();
+                            final lPath = audit['local_photo_path']?.toString();
+                            final hasNet = pUrl != null && pUrl.startsWith('http');
+                            final hasLoc = lPath != null && lPath.isNotEmpty && File(lPath).existsSync();
+
+                            if (!hasNet && !hasLoc) return const SizedBox.shrink();
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => VisitDetailScreen(visit: audit),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    height: 120,
+                                    width: double.infinity,
+                                    color: const Color(0xFF1E2820),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        if (hasNet)
+                                          Image.network(
+                                            pUrl!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => hasLoc
+                                                ? Image.file(File(lPath!), fit: BoxFit.cover)
+                                                : const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+                                          )
+                                        else
+                                          Image.file(File(lPath!), fit: BoxFit.cover),
+                                        Positioned(
+                                          bottom: 6,
+                                          right: 6,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.7),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: const [
+                                                Icon(Icons.zoom_in, color: Colors.white, size: 12),
+                                                SizedBox(width: 3),
+                                                Text('Tap to inspect', style: TextStyle(color: Colors.white, fontSize: 10)),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(

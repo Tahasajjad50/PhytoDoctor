@@ -8,6 +8,7 @@ import '../../core/models/user_model.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/share_service.dart';
+import '../../core/storage/secure_storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'account_directory_screen.dart';
 import 'chat_list_screen.dart';
@@ -136,7 +137,9 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
     } catch (_) {}
   }
 
-  void _confirmSignOut(BuildContext context) {
+  void _confirmSignOut(BuildContext context) async {
+    await SecureStorageService().clearAll();
+    if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const PortalSelectionScreen()),
