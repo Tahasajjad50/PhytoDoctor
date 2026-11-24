@@ -2,8 +2,10 @@ enum Environment { dev, staging, prod }
 
 class AppConfig {
   static const String appName = 'Phyto Doctor';
-  static const String appVersion = '1.0.3';
-  static const int buildNumber = 4;
+  static const String appVersion = '1.0.4';
+  static const int buildNumber = 7;
+  static const String cloudinaryCloudName = 'hv4hfaee';
+  static const String cloudinaryApiKey = '853659988188956';
 
   // Environment-specific configuration with compile-time overrides
   // e.g. flutter run --dart-define=API_URL=https://api.phytodoctor.pk

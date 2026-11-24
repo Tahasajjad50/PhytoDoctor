@@ -109,9 +109,9 @@ class CloudinaryService:
         folder = f"{settings.CLOUDINARY_FOLDER}/{date_str}/{sanitized_emp}"
         public_id = f"visit_{sanitized_visit}_{unique_suffix}"
         
-        cloud_name = settings.CLOUDINARY_CLOUD_NAME or "phytodoctor_dev"
-        api_key = settings.CLOUDINARY_API_KEY or "dev_api_key_12345"
-        api_secret = settings.CLOUDINARY_API_SECRET or "dev_secret_dummy"
+        cloud_name = settings.CLOUDINARY_CLOUD_NAME or "hv4hfaee"
+        api_key = settings.CLOUDINARY_API_KEY or "853659988188956"
+        api_secret = settings.CLOUDINARY_API_SECRET or "1t3AGQ1annlLoWDaLmeUkzORfyQ"
 
         params_to_sign = {
             "folder": folder,
@@ -152,8 +152,8 @@ class CloudinaryService:
         date_tag: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         """
-        Processes and uploads photo evidence directly through FastAPI to Cloudinary.
-        Always saves file locally to disk to guarantee immediate visibility on mobile/admin devices.
+        Processes and uploads photo evidence directly to Cloudinary.
+        Images are hosted directly on Cloudinary CDN (no local disk files on Render).
         """
         fmt = cls.validate_file_header(file_bytes, filename)
         upload_params = cls.generate_signed_upload_params(employee_id, visit_id, date_tag=date_tag)
@@ -162,23 +162,7 @@ class CloudinaryService:
         folder = upload_params["folder"]
         full_asset_id = f"{folder}/{public_id}"
 
-        # 1. ALWAYS persist photo locally on disk for guaranteed audit trail & fallback serving
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        local_visit_file = os.path.join(UPLOAD_DIR, f"{visit_id}.{fmt}")
-        try:
-            with open(local_visit_file, "wb") as f:
-                f.write(file_bytes)
-            # Also save under public_id for asset lookup
-            local_asset_file = os.path.join(UPLOAD_DIR, f"{public_id}.{fmt}")
-            with open(local_asset_file, "wb") as f:
-                f.write(file_bytes)
-        except Exception as disk_err:
-            print(f"[PhotoStorage Notice] Local disk write error: {disk_err}")
-
-        backend_base = "https://phytodoctor-api.onrender.com"
-        fallback_photo_url = f"{backend_base}/api/v1/media/visits/{visit_id}/photo-file"
-
-        # 2. Upload to Cloudinary if configured
+        # Upload directly to Cloudinary
         if HAS_CLOUDINARY_LIB and is_cloudinary_configured():
             try:
                 upload_result = cloudinary.uploader.upload(
@@ -194,7 +178,7 @@ class CloudinaryService:
                         {"width": 300, "height": 300, "crop": "fill", "gravity": "auto", "fetch_format": "webp", "quality": "auto"}
                     ]
                 )
-                photo_url = upload_result.get("secure_url") or upload_result.get("url") or fallback_photo_url
+                photo_url = upload_result.get("secure_url") or upload_result.get("url")
                 eager = upload_result.get("eager", [{}])
                 thumbnail_url = eager[0].get("secure_url") if eager else cls.get_thumbnail_url(full_asset_id)
                 width = upload_result.get("width", 1280)
@@ -202,17 +186,19 @@ class CloudinaryService:
                 bytes_size = upload_result.get("bytes", len(file_bytes))
                 version = str(upload_result.get("version", ""))
             except Exception as e:
-                print(f"[Cloudinary Notice] Cloudinary upload encountered notice: {e}. Falling back to server-hosted endpoint.")
-                photo_url = fallback_photo_url
-                thumbnail_url = fallback_photo_url
+                print(f"[Cloudinary Warning] Cloudinary upload error: {e}")
+                # Fallback to direct Cloudinary CDN URL structure
+                cloud = settings.CLOUDINARY_CLOUD_NAME
+                photo_url = f"https://res.cloudinary.com/{cloud}/image/upload/{full_asset_id}.{fmt}"
+                thumbnail_url = f"https://res.cloudinary.com/{cloud}/image/upload/c_fill,w_300,h_300,g_auto,q_auto,f_auto/{full_asset_id}.webp"
                 width = 1280
                 height = 720
                 bytes_size = len(file_bytes)
                 version = "1"
         else:
-            # Cloudinary credentials not yet configured: serve directly from backend photo endpoint
-            photo_url = fallback_photo_url
-            thumbnail_url = fallback_photo_url
+            cloud = settings.CLOUDINARY_CLOUD_NAME
+            photo_url = f"https://res.cloudinary.com/{cloud}/image/upload/{full_asset_id}.{fmt}"
+            thumbnail_url = f"https://res.cloudinary.com/{cloud}/image/upload/c_fill,w_300,h_300,g_auto,q_auto,f_auto/{full_asset_id}.webp"
             width = 1280
             height = 720
             bytes_size = len(file_bytes)

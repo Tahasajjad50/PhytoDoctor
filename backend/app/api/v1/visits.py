@@ -105,7 +105,14 @@ async def create_visit(
     v_id = visit_in.id.strip() if visit_in.id else str(uuid.uuid4())
     resolved_photo_url = visit_in.photo_url
     if not resolved_photo_url or "phytodoctor_dev" in resolved_photo_url:
-        resolved_photo_url = f"https://phytodoctor-api.onrender.com/api/v1/media/visits/{v_id}/photo-file"
+        cloud = settings.CLOUDINARY_CLOUD_NAME or "hv4hfaee"
+        clean_asset = visit_in.photo_asset_id.strip()
+        if "/" in clean_asset:
+            resolved_photo_url = f"https://res.cloudinary.com/{cloud}/image/upload/{clean_asset}.jpg"
+        else:
+            date_str = (visit_in.device_capture_time or now_utc).strftime("%Y-%m-%d")
+            sanitized_emp = current_user.id.replace("-", "")[:8]
+            resolved_photo_url = f"https://res.cloudinary.com/{cloud}/image/upload/{settings.CLOUDINARY_FOLDER}/{date_str}/{sanitized_emp}/{clean_asset}.jpg"
 
     visit = FieldVisit(
         id=v_id,

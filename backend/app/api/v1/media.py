@@ -307,31 +307,27 @@ async def get_visit_photo_file(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Directly serves the visit proof photo image file.
+    Directly serves or redirects to the visit proof photo image on Cloudinary.
     Guarantees photo visibility for admin audit and manager review.
     """
-    # 1. Check disk file by visit_id
+    # 1. Check visit record in DB for real Cloudinary URL
+    res = await db.execute(select(FieldVisit).where(FieldVisit.id == visit_id))
+    visit = res.scalar_one_or_none()
+    if visit:
+        if visit.photo_url and visit.photo_url.startswith("https://res.cloudinary.com") and "phytodoctor_dev" not in visit.photo_url:
+            return RedirectResponse(visit.photo_url)
+        elif visit.photo_asset_id:
+            cloud = "hv4hfaee"
+            clean_asset = visit.photo_asset_id.strip()
+            return RedirectResponse(f"https://res.cloudinary.com/{cloud}/image/upload/{clean_asset}.jpg")
+
+    # 2. Check disk file if present from prior builds
     for ext in ["jpg", "jpeg", "png", "webp"]:
         path = os.path.join(UPLOAD_DIR, f"{visit_id}.{ext}")
         if os.path.exists(path):
             return FileResponse(path, media_type=f"image/{ext if ext != 'jpg' else 'jpeg'}")
 
-    # 2. Check visit record in DB for photo_asset_id or real Cloudinary URL
-    res = await db.execute(select(FieldVisit).where(FieldVisit.id == visit_id))
-    visit = res.scalar_one_or_none()
-    if visit:
-        if visit.photo_asset_id:
-            safe_asset = os.path.basename(visit.photo_asset_id)
-            for ext in ["jpg", "jpeg", "png", "webp"]:
-                path = os.path.join(UPLOAD_DIR, f"{safe_asset}.{ext}")
-                if os.path.exists(path):
-                    return FileResponse(path, media_type=f"image/{ext if ext != 'jpg' else 'jpeg'}")
-
-        # If real Cloudinary URL exists (not mock phytodoctor_dev)
-        if visit.photo_url and visit.photo_url.startswith("https://res.cloudinary.com") and "phytodoctor_dev" not in visit.photo_url:
-            return RedirectResponse(visit.photo_url)
-
-    # 3. If file not on disk, dynamically generate field audit proof image
+    # 3. Dynamic audit proof badge if image is not reachable
     generated_bytes = CloudinaryService.generate_fallback_badge_image(visit_id=visit_id)
     return Response(content=generated_bytes, media_type="image/jpeg")
 

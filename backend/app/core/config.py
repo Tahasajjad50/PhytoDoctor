@@ -46,10 +46,10 @@ class Settings(BaseSettings):
         "https://phytodoctor-admin.firebaseapp.com",
     ]
     
-    # Cloudinary Image Storage (Optional in dev, configured in prod)
-    CLOUDINARY_CLOUD_NAME: Optional[str] = None
-    CLOUDINARY_API_KEY: Optional[str] = None
-    CLOUDINARY_API_SECRET: Optional[str] = None
+    # Cloudinary Image Storage (Active Production Storage - No local disk storage on Render)
+    CLOUDINARY_CLOUD_NAME: str = "hv4hfaee"
+    CLOUDINARY_API_KEY: str = "853659988188956"
+    CLOUDINARY_API_SECRET: str = "1t3AGQ1annlLoWDaLmeUkzORfyQ"
     CLOUDINARY_FOLDER: str = "phytodoctor/visits"
     CLOUDINARY_MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB maximum
     CLOUDINARY_ALLOWED_EXTENSIONS: List[str] = ["jpg", "jpeg", "png", "webp"]
