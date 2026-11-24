@@ -428,8 +428,20 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
     // 6. Generate UUID Idempotency Key before upload
     final visitUuid = 'VISIT_${DateTime.now().millisecondsSinceEpoch}_${widget.user.id.replaceAll("-", "").substring(0, 8)}';
 
-    // 7. Store Photo Reference in App-Private Storage
-    final privatePhotoPath = PhotoStorageService().generatePrivatePhotoPath(visitUuid, _photoAssetId!);
+    // 7. Store Photo Reference in App-Private Storage (Persist captured camera file)
+    String privatePhotoPath = _capturedPhotoPath ?? PhotoStorageService().generatePrivatePhotoPath(visitUuid, _photoAssetId!);
+    if (_capturedPhotoPath != null && File(_capturedPhotoPath!).existsSync()) {
+      try {
+        privatePhotoPath = await PhotoStorageService().persistCapturedPhotoFile(
+          visitId: visitUuid,
+          photoAssetId: _photoAssetId!,
+          sourceFilePath: _capturedPhotoPath!,
+        );
+      } catch (persistErr) {
+        debugPrint('[RecordVisit] Persist photo file warning: $persistErr');
+        privatePhotoPath = _capturedPhotoPath!;
+      }
+    }
 
     // 8. Build Visit Payload with UUID Idempotency Key
     final visitPayload = <String, dynamic>{

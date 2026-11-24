@@ -181,7 +181,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     );
   }
 
-  Future<void> _verifyVisit(String visitId, String clientName, bool approved) async {
+  Future<void> _verifyVisit(String visitId, String clientName, bool approved, {String? reviewReason}) async {
     if (_processingVisitIds.contains(visitId)) return;
     setState(() {
       _processingVisitIds.add(visitId);
@@ -190,6 +190,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
     try {
       final token = widget.user.accessToken;
       final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits/$visitId/verify');
+      final finalReason = reviewReason ?? (approved ? 'Verified on-site by supervisor' : 'Flagged by supervisor review');
       final res = await http.post(
         url,
         headers: {
@@ -199,7 +200,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         },
         body: jsonEncode({
           'status': approved ? 'VERIFIED' : 'REJECTED',
-          'review_reason': approved ? 'Verified on-site by supervisor' : 'Flagged by supervisor review',
+          'review_reason': finalReason,
         }),
       ).timeout(const Duration(seconds: 20));
 
@@ -212,7 +213,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           SnackBar(
             content: Text(approved
                 ? 'Visit verified & approved for $clientName'
-                : 'Visit flagged / rejected for $clientName'),
+                : 'Visit flagged / rejected for $clientName ($finalReason)'),
             backgroundColor: approved ? AppTheme.cropGreen : AppTheme.alertCrimson,
           ),
         );
@@ -235,6 +236,84 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         });
         _loadPendingVisits();
       }
+    }
+  }
+
+  Future<void> _showRejectReasonDialog(String visitId, String clientName) async {
+    final TextEditingController reasonController = TextEditingController();
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.alertCrimson, size: 26),
+            SizedBox(width: 8),
+            Text(
+              'Reject Field Visit',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to reject the visit for "$clientName"?',
+              style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Rejection Reason (Optional):',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
+              decoration: InputDecoration(
+                hintText: 'e.g. Unclear photo proof, location mismatch, client unreachable...',
+                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                filled: true,
+                fillColor: const Color(0xFFF9FAFB),
+                contentPadding: const EdgeInsets.all(12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppTheme.sageBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: AppTheme.cropGreen),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.alertCrimson,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            child: const Text('Reject Visit'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final userReason = reasonController.text.trim();
+      final reasonToSend = userReason.isNotEmpty ? userReason : 'Flagged by supervisor review';
+      await _verifyVisit(visitId, clientName, false, reviewReason: reasonToSend);
     }
   }
 
@@ -530,8 +609,13 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
 
                           // Photo preview thumbnail for supervisor inspection
                           Builder(builder: (context) {
-                            final pUrl = audit['photo_url']?.toString();
+                            String? pUrl = audit['photo_url']?.toString();
                             final lPath = audit['local_photo_path']?.toString();
+                            final visitId = audit['id']?.toString() ?? '';
+                            if (pUrl != null && pUrl.contains('phytodoctor_dev') && visitId.isNotEmpty) {
+                              final base = AuthService.defaultBaseUrl.isNotEmpty ? AuthService.defaultBaseUrl : 'https://phytodoctor-api.onrender.com';
+                              pUrl = '$base/api/v1/media/visits/$visitId/photo-file';
+                            }
                             final hasNet = pUrl != null && pUrl.startsWith('http');
                             final hasLoc = lPath != null && lPath.isNotEmpty && File(lPath).existsSync();
 
@@ -561,9 +645,19 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                           Image.network(
                                             pUrl!,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => hasLoc
-                                                ? Image.file(File(lPath!), fit: BoxFit.cover)
-                                                : const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+                                            errorBuilder: (_, __, ___) {
+                                              if (hasLoc) return Image.file(File(lPath!), fit: BoxFit.cover);
+                                              final base = AuthService.defaultBaseUrl.isNotEmpty ? AuthService.defaultBaseUrl : 'https://phytodoctor-api.onrender.com';
+                                              final fallbackUrl = '$base/api/v1/media/visits/$visitId/photo-file';
+                                              if (pUrl != fallbackUrl) {
+                                                return Image.network(
+                                                  fallbackUrl,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+                                                );
+                                              }
+                                              return const Center(child: Icon(Icons.broken_image, color: Colors.white54));
+                                            },
                                           )
                                         else
                                           Image.file(File(lPath!), fit: BoxFit.cover),
@@ -704,7 +798,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: OutlinedButton(
-                                  onPressed: isProcessing ? null : () => _verifyVisit(visitId, clientName, false),
+                                  onPressed: isProcessing ? null : () => _showRejectReasonDialog(visitId, clientName),
                                   style: OutlinedButton.styleFrom(
                                     minimumSize: const Size(0, 38),
                                     foregroundColor: AppTheme.alertCrimson,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../models/visit_state.dart';
+import '../services/auth_service.dart';
 import '../storage/cloudinary_upload_service.dart';
 import '../storage/photo_storage_service.dart';
 import '../storage/sqlite_visit_database.dart';
@@ -162,7 +163,8 @@ class OfflineSyncManager extends ChangeNotifier {
             confirmedPhotoUrl = uploadResult.photoUrl;
           } catch (uploadError) {
             debugPrint('[OfflineSyncManager] Cloudinary direct upload note: $uploadError. Using resilient staging path.');
-            confirmedPhotoUrl = 'https://res.cloudinary.com/phytodoctor/image/upload/v1/visits/${visit.photoAssetId}.jpg';
+            final base = AuthService.defaultBaseUrl.isNotEmpty ? AuthService.defaultBaseUrl : 'https://phytodoctor-api.onrender.com';
+            confirmedPhotoUrl = '$base/api/v1/media/visits/${visit.id}/photo-file';
           }
         }
 

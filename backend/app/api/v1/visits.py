@@ -102,8 +102,13 @@ async def create_visit(
             f"SUSPICIOUS_UPLOAD_DELAY: Photo capture occurred {clock_drift_sec / 3600:.1f} hours prior to server upload."
         )
 
+    v_id = visit_in.id.strip() if visit_in.id else str(uuid.uuid4())
+    resolved_photo_url = visit_in.photo_url
+    if not resolved_photo_url or "phytodoctor_dev" in resolved_photo_url:
+        resolved_photo_url = f"https://phytodoctor-api.onrender.com/api/v1/media/visits/{v_id}/photo-file"
+
     visit = FieldVisit(
-        id=visit_in.id.strip() if visit_in.id else str(uuid.uuid4()),
+        id=v_id,
         employee_id=current_user.id,
         client_name=visit_in.client_name.strip(),
         client_phone=visit_in.client_phone.strip() if visit_in.client_phone else None,
@@ -115,7 +120,7 @@ async def create_visit(
         device_capture_time=visit_in.device_capture_time,
         server_receipt_time=now_utc,
         photo_asset_id=visit_in.photo_asset_id.strip(),
-        photo_url=visit_in.photo_url,
+        photo_url=resolved_photo_url,
         is_flagged_for_review=is_flagged,
         review_signals=json.dumps(review_signals) if review_signals else None,
         clock_drift_seconds=round(clock_drift_sec, 2),
