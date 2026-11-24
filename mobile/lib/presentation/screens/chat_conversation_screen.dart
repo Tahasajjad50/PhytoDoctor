@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/models/chat_model.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/chat_notification_monitor.dart';
 import '../../core/services/chat_service.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'chat_list_screen.dart';
 
@@ -99,6 +101,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           for (final msg in newMsgs) {
             if (!existingIds.contains(msg.id)) {
               _messages.add(msg);
+              ChatNotificationMonitor().markSeen('${widget.room.id}_${msg.content.trim()}_${msg.createdAt.millisecondsSinceEpoch}');
+              if (msg.senderId != widget.currentUser.id) {
+                NotificationService().showMessageNotification(
+                  title: '${msg.senderName} • ${widget.room.title}',
+                  body: msg.content,
+                  payload: widget.room.id,
+                );
+              }
             }
           }
         });
@@ -130,6 +140,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
     try {
       final newMsg = await _chatService.sendMessage(widget.room.id, text);
+      ChatNotificationMonitor().markSeen('${widget.room.id}_${newMsg.content.trim()}_${newMsg.createdAt.millisecondsSinceEpoch}');
+
+      // Display system notification in Android notification bar for sent message confirmation
+      NotificationService().showMessageNotification(
+        title: 'Message Sent • ${widget.room.title}',
+        body: text,
+        payload: widget.room.id,
+      );
+
       if (mounted) {
         setState(() {
           _messages.add(newMsg);

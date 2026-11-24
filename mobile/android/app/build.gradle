@@ -56,18 +56,27 @@ android {
 
     signingConfigs {
         release {
-            if (keystorePropertiesFile.exists()) {
+            if (file('phytodoctor-release.jks').exists()) {
+                keyAlias 'phytodoctor'
+                keyPassword 'phytodoctor2026'
+                storeFile file('phytodoctor-release.jks')
+                storePassword 'phytodoctor2026'
+                v1SigningEnabled true
+                v2SigningEnabled true
+            } else if (keystorePropertiesFile.exists()) {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
                 storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
                 storePassword keystoreProperties['storePassword']
+                v1SigningEnabled true
+                v2SigningEnabled true
             }
         }
     }
 
     buildTypes {
         release {
-            if (keystorePropertiesFile.exists()) {
+            if (file('phytodoctor-release.jks').exists() || keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
             } else {
                 signingConfig signingConfigs.debug

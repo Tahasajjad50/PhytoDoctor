@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
+import '../services/chat_notification_monitor.dart';
 
 class SecureStorageService {
   static const String _keyAccessToken = 'phyto_access_token';
@@ -100,6 +101,7 @@ class SecureStorageService {
 
   Future<void> clearAll() async {
     _memoryCache.clear();
+    ChatNotificationMonitor().stop();
     try {
       await _storage.deleteAll();
     } catch (_) {

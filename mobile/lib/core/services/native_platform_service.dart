@@ -70,5 +70,35 @@ class NativePlatformService {
       return false;
     }
   }
+
+  /// Displays an Android system notification bar notification
+  static Future<bool> showNotification({
+    required String title,
+    required String body,
+    String? payload,
+    int? id,
+  }) async {
+    try {
+      final res = await _channel.invokeMethod<bool>('showNotification', {
+        'title': title,
+        'body': body,
+        'payload': payload ?? '',
+        if (id != null) 'id': id,
+      });
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Requests notification permission on Android 13+ (POST_NOTIFICATIONS)
+  static Future<bool> requestNotificationPermission() async {
+    try {
+      final res = await _channel.invokeMethod<bool>('requestNotificationPermission');
+      return res ?? true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 

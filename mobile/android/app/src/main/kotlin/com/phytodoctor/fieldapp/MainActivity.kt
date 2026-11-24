@@ -2,6 +2,9 @@ package com.phytodoctor.fieldapp
 
 import android.Manifest
 import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,6 +18,8 @@ import android.os.Looper
 import android.provider.MediaStore
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -27,13 +32,32 @@ class MainActivity: FlutterActivity() {
     private val LEGACY_CHANNEL = "com.phytodoctor.fieldapp/share"
     private val PERMISSION_REQUEST_CODE = 2001
     private val CAMERA_REQUEST_CODE = 2002
+    private val NOTIFICATION_REQUEST_CODE = 2003
+    private val NOTIFICATION_CHANNEL_ID = "phytodoctor_chat_channel"
 
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var pendingCameraResult: MethodChannel.Result? = null
     private var currentPhotoPath: String? = null
 
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Phyto Doctor Messages"
+            val descriptionText = "Notifications for chat messages, team alerts, and announcements"
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, name, importance).apply {
+                description = descriptionText
+                enableVibration(true)
+                enableLights(true)
+                setShowBadge(true)
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        createNotificationChannels()
 
         val handler = MethodChannel.MethodCallHandler { call, result ->
             when (call.method) {
@@ -58,13 +82,16 @@ class MainActivity: FlutterActivity() {
                     }
                 }
                 "requestPermissions" -> {
-                    val permissions = arrayOf(
+                    val permissionsList = mutableListOf(
                         Manifest.permission.CAMERA,
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.ACCESS_COARSE_LOCATION
                     )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        permissionsList.add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
 
-                    val ungranted = permissions.filter {
+                    val ungranted = permissionsList.filter {
                         ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
                     }
 
@@ -75,12 +102,76 @@ class MainActivity: FlutterActivity() {
                         ActivityCompat.requestPermissions(this, ungranted.toTypedArray(), PERMISSION_REQUEST_CODE)
                     }
                 }
+                "requestNotificationPermission" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_REQUEST_CODE)
+                            result.success(false)
+                        } else {
+                            result.success(true)
+                        }
+                    } else {
+                        result.success(true)
+                    }
+                }
+                "showNotification" -> {
+                    val title = call.argument<String>("title") ?: "Phyto Doctor"
+                    val body = call.argument<String>("body") ?: ""
+                    val id = call.argument<Int>("id") ?: (System.currentTimeMillis() % 100000).toInt()
+                    val payload = call.argument<String>("payload") ?: ""
+
+                    try {
+                        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                            putExtra("payload", payload)
+                            putExtra("from_notification", true)
+                        } ?: Intent(this, MainActivity::class.java)
+
+                        val pendingIntent = PendingIntent.getActivity(
+                            this,
+                            id,
+                            launchIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                        )
+
+                        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                            .setSmallIcon(R.mipmap.ic_launcher)
+                            .setContentTitle(title)
+                            .setContentText(body)
+                            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                            .setPriority(NotificationCompat.PRIORITY_HIGH)
+                            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                            .setAutoCancel(true)
+                            .setContentIntent(pendingIntent)
+                            .setDefaults(NotificationCompat.DEFAULT_ALL)
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                                NotificationManagerCompat.from(this).notify(id, builder.build())
+                                result.success(true)
+                            } else {
+                                result.success(false)
+                            }
+                        } else {
+                            NotificationManagerCompat.from(this).notify(id, builder.build())
+                            result.success(true)
+                        }
+                    } catch (e: Exception) {
+                        result.error("NOTIFICATION_ERROR", e.message, null)
+                    }
+                }
                 "checkPermissions" -> {
                     val cameraGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
                     val locationGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                    val notificationGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                    } else {
+                        true
+                    }
                     result.success(mapOf(
                         "camera" to cameraGranted,
-                        "location" to locationGranted
+                        "location" to locationGranted,
+                        "notification" to notificationGranted
                     ))
                 }
                 "capturePhoto" -> {

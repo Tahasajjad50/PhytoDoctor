@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'core/config/app_config.dart';
 import 'core/models/user_model.dart';
+import 'core/services/chat_notification_monitor.dart';
+import 'core/services/notification_service.dart';
 import 'core/storage/secure_storage_service.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/screens/admin_dashboard_screen.dart';
@@ -9,6 +11,9 @@ import 'presentation/screens/portal_selection_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize native Android system notification channel & permissions
+  await NotificationService().initialize();
 
   final storage = SecureStorageService();
   final lastBuildNumber = await storage.getStoredBuildNumber();
@@ -22,6 +27,9 @@ void main() async {
   } else {
     // Normal reopen -> auto-reopen without credentials prompt
     savedUser = await storage.getUserSession();
+    if (savedUser != null && savedUser.isActive) {
+      ChatNotificationMonitor().start(savedUser);
+    }
   }
 
   runApp(PhytoDoctorApp(initialUser: savedUser));

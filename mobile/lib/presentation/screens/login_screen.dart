@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/config/app_config.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/chat_notification_monitor.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../widgets/phyto_logo.dart';
@@ -94,6 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (user.accessToken != null) {
           await storage.saveTokens(accessToken: user.accessToken!);
         }
+        ChatNotificationMonitor().start(user);
       } catch (_) {}
 
       if (!mounted) return;
