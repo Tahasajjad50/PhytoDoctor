@@ -1,10 +1,3 @@
-databases:
-  - name: phytodoctor-db
-    plan: free
-    region: oregon
-    databaseName: phytodoctor
-    user: phytodoctor_user
-
 services:
   - type: web
     name: phytodoctor-api
@@ -23,13 +16,10 @@ services:
       - key: CREDENTIAL_ENCRYPTION_KEY
         generateValue: true
       - key: DATABASE_URL
-        fromDatabase:
-          name: phytodoctor-db
-          property: connectionString
+        sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-
