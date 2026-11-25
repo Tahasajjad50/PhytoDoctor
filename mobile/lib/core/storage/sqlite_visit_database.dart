@@ -334,7 +334,11 @@ class SqliteVisitDatabase {
     row['sync_state'] = state.name;
     row['updated_at'] = DateTime.now().toUtc().toIso8601String();
 
-    if (error != null) row['sync_error'] = error;
+    if (error != null) {
+      row['sync_error'] = error;
+    } else if (state == VisitSyncState.synced || state == VisitSyncState.needsReview) {
+      row['sync_error'] = null;
+    }
     if (serverReceiptTime != null) {
       row['server_receipt_time'] = serverReceiptTime.toUtc().toIso8601String();
     }
@@ -379,6 +383,30 @@ class SqliteVisitDatabase {
     final list = _tableRows.values.map((r) => LocalVisitModel.fromSqliteMap(r)).toList();
     list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
+  }
+
+  /// Marks any local pending/failed visits that already exist on the server as synced
+  Future<int> markUploadedIdsAsSynced(Iterable<String> serverVisitIds) async {
+    final serverSet = serverVisitIds.toSet();
+    if (serverSet.isEmpty) return 0;
+
+    int updated = 0;
+    for (final entry in _tableRows.entries) {
+      final state = entry.value['sync_state'];
+      if (serverSet.contains(entry.key) &&
+          (state == VisitSyncState.pendingSync.name ||
+              state == VisitSyncState.syncFailed.name ||
+              state == VisitSyncState.syncing.name)) {
+        entry.value['sync_state'] = VisitSyncState.synced.name;
+        entry.value['sync_error'] = null;
+        entry.value['updated_at'] = DateTime.now().toUtc().toIso8601String();
+        updated++;
+      }
+    }
+    if (updated > 0) {
+      await flushToDisk();
+    }
+    return updated;
   }
 
   /// Returns count of visits awaiting upload

@@ -202,8 +202,12 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
         final rawVisits = data['today_visits'];
         if (rawVisits is List) {
           _todayVisits = rawVisits.map((e) => e as Map<String, dynamic>).toList();
+          final serverIds = _todayVisits
+              .map((v) => v['id']?.toString() ?? '')
+              .where((id) => id.isNotEmpty);
+          _syncManager.reconcileWithServerVisits(serverIds);
         }
-        _pendingSyncCount = data['pending_sync_count'] ?? _syncManager.pendingCount;
+        _pendingSyncCount = _syncManager.pendingCount;
         _progressPercentage = (data['target_progress_percentage'] as num?)?.toDouble() ?? 
             (_todayTarget > 0 ? (_verifiedVisits / _todayTarget * 100) : 0.0);
         _designation = data['designation'] as String?;
@@ -652,11 +656,11 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: _DashboardMetricCard(
-                                        title: 'Pending Sync',
-                                        value: '$_pendingSyncCount Drafts',
-                                        subtitle: _pendingSyncCount == 0 ? 'Queue Up to Date' : 'In SQLite Cache',
+                                        title: 'Upload Queue',
+                                        value: _pendingSyncCount == 0 ? 'All Synced' : '$_pendingSyncCount Queued',
+                                        subtitle: _pendingSyncCount == 0 ? 'Sent to Admin' : 'Pending upload',
                                         accentColor: _pendingSyncCount == 0 ? AppTheme.cropGreen : AppTheme.alertCrimson,
-                                        icon: Icons.sync,
+                                        icon: _pendingSyncCount == 0 ? Icons.cloud_done : Icons.sync,
                                       ),
                                     ),
                                   ],
@@ -901,8 +905,8 @@ class _OfflineSyncPanel extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     pending > 0
-                        ? '$pending Visit(s) Queued in SQLite'
-                        : 'Offline Cache Up to Date',
+                        ? '$pending Visit(s) in Queue'
+                        : 'All Visits Synced',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
@@ -911,41 +915,31 @@ class _OfflineSyncPanel extends StatelessWidget {
                   ),
                 ],
               ),
-              ElevatedButton.icon(
-                onPressed: isSyncing ? null : onSyncNowTap,
-                icon: isSyncing
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.sync, size: 16),
-                label: Text(isSyncing ? 'Syncing...' : 'Sync Now'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.botanicalPrimary,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(100, 36),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              if (pending > 0 || isSyncing)
+                ElevatedButton.icon(
+                  onPressed: isSyncing ? null : onSyncNowTap,
+                  icon: isSyncing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.sync, size: 16),
+                  label: Text(isSyncing ? 'Syncing...' : 'Sync Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.botanicalPrimary,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(100, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              Text(
-                'Last Sync: $lastSyncStr',
-                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-              ),
-              const SizedBox(width: 8),
-              const Text('•', style: TextStyle(color: AppTheme.textMuted)),
-              const SizedBox(width: 8),
-              const Text(
-                'Auto-retries with backoff',
-                style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
-              ),
-            ],
+          Text(
+            pending > 0 ? 'Waiting to upload • Last Sync: $lastSyncStr' : 'Sent to Admin / CEO • Last Sync: $lastSyncStr',
+            style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
           ),
           if (isSyncing) ...[
             const SizedBox(height: 10),

@@ -48,7 +48,18 @@ class OfflineSyncManager extends ChangeNotifier {
   Future<void> refreshCounts() async {
     _pendingCount = await _db.getPendingCount();
     _needsReviewCount = await _db.getNeedsReviewCount();
+    if (_pendingCount == 0) {
+      _lastError = null;
+    }
     notifyListeners();
+  }
+
+  /// Reconciles local SQLite queue with visit IDs already confirmed on the server
+  Future<void> reconcileWithServerVisits(Iterable<String> serverVisitIds) async {
+    final updated = await _db.markUploadedIdsAsSynced(serverVisitIds);
+    if (updated > 0) {
+      await refreshCounts();
+    }
   }
 
   /// Storage Health Check
