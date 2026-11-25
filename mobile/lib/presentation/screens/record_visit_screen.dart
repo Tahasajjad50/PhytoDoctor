@@ -41,13 +41,13 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
   String _notes = '';
 
   // GPS State
-  double? _latitude = 31.5204;
-  double? _longitude = 74.3587;
-  double _gpsAccuracy = 12.4; // Initial lock: 12.4m
+  double? _latitude;
+  double? _longitude;
+  double _gpsAccuracy = 999.0;
   bool _isMockLocation = false;
-  bool _gpsLocked = true;
+  bool _gpsLocked = false;
   bool _isAcquiringGps = false;
-  String _gpsStatusMessage = 'GPS signal locked with high precision (±12.4m)';
+  String _gpsStatusMessage = 'Acquiring GPS lock...';
 
   // In-app Camera Evidence State
   String? _capturedPhotoPath;
@@ -128,12 +128,13 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
       ),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       final now = DateTime.now().toUtc();
+      final empTag = widget.user.id.replaceAll("-", "").padRight(8, '0').substring(0, 8);
       setState(() {
         _capturedPhotoPath = result;
         _deviceCapturedAt = now;
-        _photoAssetId = 'PHOTO_${now.millisecondsSinceEpoch}_${widget.user.id.replaceAll("-", "").substring(0, 8)}';
+        _photoAssetId = 'PHOTO_${now.millisecondsSinceEpoch}_$empTag';
       });
       // Ensure real hardware location is locked at the moment of photo capture
       _retryGps();
@@ -153,16 +154,16 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
       ),
     );
 
-    if (result != null) {
+    if (result != null && mounted) {
       setState(() {
         _latitude = result['latitude'] as double?;
         _longitude = result['longitude'] as double?;
         _gpsAccuracy = (result['accuracy'] as double?) ?? 15.0;
         _isMockLocation = (result['is_mock'] as bool?) ?? false;
-        _gpsLocked = true;
+        _gpsLocked = _latitude != null && _longitude != null;
         _gpsStatusMessage = _gpsAccuracy <= widget.accuracyThreshold
-            ? 'GPS calibrated successfully (±${_gpsAccuracy.toStringAsFixed(1)}m)'
-            : 'Calibrated accuracy (±${_gpsAccuracy.toStringAsFixed(1)}m) exceeds ${widget.accuracyThreshold.toStringAsFixed(0)}m threshold.';
+            ? 'GPS locked (±${_gpsAccuracy.toStringAsFixed(1)}m)'
+            : 'Low accuracy (±${_gpsAccuracy.toStringAsFixed(1)}m).';
       });
     }
   }
@@ -426,7 +427,8 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
     if (confirmed != true) return;
 
     // 6. Generate UUID Idempotency Key before upload
-    final visitUuid = 'VISIT_${DateTime.now().millisecondsSinceEpoch}_${widget.user.id.replaceAll("-", "").substring(0, 8)}';
+    final empTag = widget.user.id.replaceAll("-", "").padRight(8, '0').substring(0, 8);
+    final visitUuid = 'VISIT_${DateTime.now().millisecondsSinceEpoch}_$empTag';
 
     // 7. Store Photo Reference in App-Private Storage (Persist captured camera file)
     String privatePhotoPath = _capturedPhotoPath ?? PhotoStorageService().generatePrivatePhotoPath(visitUuid, _photoAssetId!);
@@ -483,24 +485,16 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
 
     if (!mounted) return;
 
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(syncedToServer
+            ? 'Visit uploaded.'
+            : 'Saved offline. Will auto-sync.'),
+        backgroundColor: syncedToServer ? AppTheme.cropGreen : AppTheme.earthAmber,
+        duration: const Duration(seconds: 3),
+      ),
+    );
     Navigator.pop(context, true);
-
-    if (syncedToServer) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Field visit verified and uploaded to server directly!'),
-          backgroundColor: AppTheme.cropGreen,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Visit saved locally in offline queue. Auto-sync will upload when online.'),
-          backgroundColor: AppTheme.earthAmber,
-          duration: Duration(seconds: 4),
-        ),
-      );
-    }
   }
 
   Widget _reviewRow(String label, String value) {
@@ -584,33 +578,39 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      _isAcquiringGps
-                                          ? 'FETCHING COORDINATES...'
-                                          : (_gpsLocked ? 'GPS LOCKED' : 'NO GPS FIX'),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w800,
-                                        color: _isMockLocation ? AppTheme.alertCrimson : AppTheme.textMain,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: isAccuracyAcceptable ? AppTheme.cropGreenLight : const Color(0xFFFFF3E0),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
+                                    Flexible(
                                       child: Text(
-                                        '±${_gpsAccuracy.toStringAsFixed(1)}m',
+                                        _isAcquiringGps
+                                            ? 'FETCHING GPS...'
+                                            : (_gpsLocked ? 'GPS LOCKED' : 'NO GPS FIX'),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                          color: isAccuracyAcceptable ? AppTheme.cropGreen : AppTheme.earthAmber,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: _isMockLocation ? AppTheme.alertCrimson : AppTheme.textMain,
+                                          letterSpacing: 0.5,
                                         ),
                                       ),
                                     ),
+                                    if (_gpsLocked) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: isAccuracyAcceptable ? AppTheme.cropGreenLight : const Color(0xFFFFF3E0),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          '±${_gpsAccuracy.toStringAsFixed(1)}m',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: isAccuracyAcceptable ? AppTheme.cropGreen : AppTheme.earthAmber,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                                 const SizedBox(height: 3),

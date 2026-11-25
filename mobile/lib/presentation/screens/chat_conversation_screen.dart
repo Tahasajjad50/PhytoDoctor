@@ -4,7 +4,6 @@ import '../../core/models/chat_model.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/chat_notification_monitor.dart';
 import '../../core/services/chat_service.dart';
-import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'chat_list_screen.dart';
 
@@ -136,18 +135,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     if (text.isEmpty || _isSending) return;
 
     setState(() => _isSending = true);
-    _messageController.clear();
 
     try {
       final newMsg = await _chatService.sendMessage(widget.room.id, text);
+      _messageController.clear();
       ChatNotificationMonitor().markSeen('${widget.room.id}_${newMsg.content.trim()}_${newMsg.createdAt.millisecondsSinceEpoch}');
-
-      // Display system notification in Android notification bar for sent message confirmation
-      NotificationService().showMessageNotification(
-        title: 'Message Sent • ${widget.room.title}',
-        body: text,
-        payload: widget.room.id,
-      );
 
       if (mounted) {
         setState(() {
@@ -185,11 +177,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ),
             Text(
               widget.room.isAnnouncement
-                  ? 'Company-Wide Broadcast Channel'
+                  ? 'Broadcasts'
                   : widget.room.isManagement
-                      ? 'Executive & Admin Channel'
-                      : 'Direct Secure Communication',
-              style: const TextStyle(fontSize: 11, color: Colors.white70),
+                      ? 'Management'
+                      : 'Direct Chat',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
             ),
           ],
         ),
@@ -256,8 +250,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                                   const SizedBox(height: 10),
                                   Text(
                                     widget.room.isAnnouncement
-                                        ? 'No announcements posted yet.'
-                                        : 'No messages yet. Send a message to start!',
+                                        ? 'No announcements yet.'
+                                        : 'No messages yet.',
                                     style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
                                   ),
                                 ],
@@ -284,7 +278,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 padding: const EdgeInsets.all(14),
                 color: Colors.grey.shade200,
                 child: const Text(
-                  'Only CEO and Administrators can post in this channel.',
+                  'Read-only channel (Admins only).',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
                 ),
@@ -340,12 +334,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    msg.senderName,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: isMe ? Colors.white : AppTheme.textMain,
+                  Flexible(
+                    child: Text(
+                      msg.senderName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isMe ? Colors.white : AppTheme.textMain,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 6),

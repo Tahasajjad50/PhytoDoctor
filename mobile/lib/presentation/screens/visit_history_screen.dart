@@ -122,28 +122,28 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                       _FilterTab(
                         title: 'All (${_visits.length})',
                         isSelected: _selectedFilter == 'ALL',
-                        onTap: () => setState(() => _selectedFilter == 'ALL'),
+                        onTap: () => setState(() => _selectedFilter = 'ALL'),
                       ),
                       const SizedBox(width: 8),
                       _FilterTab(
                         title: 'Verified ($verifiedCount)',
                         isSelected: _selectedFilter == 'VERIFIED',
                         badgeColor: AppTheme.cropGreen,
-                        onTap: () => setState(() => _selectedFilter == 'VERIFIED'),
+                        onTap: () => setState(() => _selectedFilter = 'VERIFIED'),
                       ),
                       const SizedBox(width: 8),
                       _FilterTab(
                         title: 'Pending ($pendingCount)',
                         isSelected: _selectedFilter == 'PENDING',
                         badgeColor: AppTheme.earthAmber,
-                        onTap: () => setState(() => _selectedFilter == 'PENDING'),
+                        onTap: () => setState(() => _selectedFilter = 'PENDING'),
                       ),
                       const SizedBox(width: 8),
                       _FilterTab(
                         title: 'Rejected ($rejectedCount)',
                         isSelected: _selectedFilter == 'REJECTED',
                         badgeColor: AppTheme.alertCrimson,
-                        onTap: () => setState(() => _selectedFilter == 'REJECTED'),
+                        onTap: () => setState(() => _selectedFilter = 'REJECTED'),
                       ),
                     ],
                   ),
@@ -227,7 +227,7 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                         MaterialPageRoute(
                                           builder: (context) => VisitDetailScreen(visit: visit),
                                         ),
-                                      );
+                                      ).then((_) => _fetchVisits());
                                     },
                                     child: Container(
                                       padding: const EdgeInsets.all(16),
@@ -253,6 +253,7 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
+                                              const SizedBox(width: 8),
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                 decoration: BoxDecoration(
@@ -300,7 +301,7 @@ class _VisitHistoryScreenState extends State<VisitHistoryScreen> {
                                               const Icon(Icons.location_on, size: 14, color: AppTheme.botanicalPrimary),
                                               const SizedBox(width: 4),
                                               Text(
-                                                'GPS ±${accuracy}m',
+                                                'GPS ±${(accuracy is num ? accuracy.toDouble() : double.tryParse(accuracy.toString()) ?? 0.0).toStringAsFixed(1)}m',
                                                 style: const TextStyle(fontSize: 12, color: AppTheme.botanicalPrimary),
                                               ),
                                             ],

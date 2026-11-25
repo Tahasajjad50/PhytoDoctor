@@ -228,20 +228,27 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'PHYTO DOCTOR FIELD AUDIT',
-                                style: TextStyle(
-                                  color: Color(0xFF81C784),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
+                              const Expanded(
+                                child: Text(
+                                  'PHYTO DOCTOR FIELD AUDIT',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Color(0xFF81C784),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
-                              Text(
-                                'GPS ACCURACY: $accStr',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'GPS ACCURACY: $accStr',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
@@ -270,25 +277,29 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               color: Colors.black,
               child: _isCaptured
                   ? Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        OutlinedButton.icon(
-                          onPressed: _retake,
-                          icon: const Icon(Icons.refresh, color: Colors.white),
-                          label: const Text('Retake', style: TextStyle(color: Colors.white)),
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.white60),
-                            minimumSize: const Size(130, 48),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _retake,
+                            icon: const Icon(Icons.refresh, color: Colors.white),
+                            label: const Text('Retake', style: TextStyle(color: Colors.white)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.white60),
+                              minimumSize: const Size(0, 48),
+                            ),
                           ),
                         ),
-                        ElevatedButton.icon(
-                          onPressed: _confirm,
-                          icon: const Icon(Icons.check, color: Colors.white),
-                          label: const Text('Confirm Photo'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.cropGreen,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(140, 48),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _confirm,
+                            icon: const Icon(Icons.check, color: Colors.white),
+                            label: const Text('Confirm Photo'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.cropGreen,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, 48),
+                            ),
                           ),
                         ),
                       ],

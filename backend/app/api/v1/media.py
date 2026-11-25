@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
 from app.models.user import User, UserRole
@@ -81,13 +82,28 @@ async def request_photo_upload_authorization(
     - Validates authenticated employee and visit ID.
     - Restricts public ID, folder, and allowable formats.
     """
-    visit = await get_and_authorize_visit(visit_id, current_user, db)
-    
+    res = await db.execute(select(FieldVisit).where(FieldVisit.id == visit_id))
+    visit = res.scalar_one_or_none()
+    if visit:
+        if current_user.role == UserRole.EMPLOYEE.value and visit.employee_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You can only authorize photo uploads for your own visits.",
+            )
+        elif current_user.role == UserRole.MANAGER.value and visit.employee_id != current_user.id:
+            emp_res = await db.execute(select(User).where(User.id == visit.employee_id))
+            emp = emp_res.scalar_one_or_none()
+            if not emp or (emp.manager_id != current_user.id and emp.created_by_id != current_user.id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: Visit belongs to another team.",
+                )
+
     # Generate signature with restricted daily folder and unique asset naming
     signed_params = CloudinaryService.generate_signed_upload_params(
         employee_id=current_user.id,
-        visit_id=visit.id,
-        date_tag=visit.device_capture_time or datetime.now(timezone.utc),
+        visit_id=visit.id if visit else visit_id,
+        date_tag=(visit.device_capture_time if visit else None) or datetime.now(timezone.utc),
     )
 
     await log_audit_event(
@@ -95,7 +111,7 @@ async def request_photo_upload_authorization(
         action="MEDIA_UPLOAD_AUTHORIZED",
         actor_id=current_user.id,
         actor_role=current_user.role,
-        affected_record_id=visit.id,
+        affected_record_id=visit.id if visit else visit_id,
         affected_record_type="FieldVisit",
         metadata={
             "public_id": signed_params["public_id"],
@@ -215,8 +231,21 @@ async def confirm_photo_association(
         "version": req.version,
     }
 
+    clean_asset_id = req.photo_asset_id.strip()
+    dup_res = await db.execute(
+        select(FieldVisit).where(
+            FieldVisit.photo_asset_id == clean_asset_id,
+            FieldVisit.id != visit_id,
+        )
+    )
+    if dup_res.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate photo_asset_id is already linked to another visit.",
+        )
+
     if visit:
-        visit.photo_asset_id = req.photo_asset_id.strip()
+        visit.photo_asset_id = clean_asset_id
         visit.photo_url = req.photo_url.strip()
         visit.photo_metadata = json.dumps(meta)
         visit.photo_uploaded_at = now_utc
@@ -317,7 +346,7 @@ async def get_visit_photo_file(
         if visit.photo_url and visit.photo_url.startswith("https://res.cloudinary.com") and "phytodoctor_dev" not in visit.photo_url:
             return RedirectResponse(visit.photo_url)
         elif visit.photo_asset_id:
-            cloud = "hv4hfaee"
+            cloud = settings.CLOUDINARY_CLOUD_NAME or "hv4hfaee"
             clean_asset = visit.photo_asset_id.strip()
             return RedirectResponse(f"https://res.cloudinary.com/{cloud}/image/upload/{clean_asset}.jpg")
 

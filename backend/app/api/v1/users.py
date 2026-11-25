@@ -7,8 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin, require_owner
 from app.core.security import get_password_hash, encrypt_credential, decrypt_credential
+from app.models.attendance import Attendance
+from app.models.chat import ChatMessage, ChatRoom
+from app.models.customer import Customer
 from app.models.refresh_token import RefreshToken
+from app.models.target import EmployeeTarget
 from app.models.user import User, UserRole
+from app.models.visit import FieldVisit
 from app.schemas.auth import MessageResponse
 from app.schemas.user import (
     AdminPasswordResetResponse,
@@ -375,6 +380,10 @@ async def update_user(
         user.full_name = user_in.full_name.strip()
     if user_in.email is not None:
         user.email = user_in.email.lower()
+    if user_in.phone is not None:
+        user.phone = user_in.phone.strip() if user_in.phone.strip() else None
+    if user_in.designation is not None:
+        user.designation = user_in.designation.strip() if user_in.designation.strip() else None
     if user_in.manager_id is not None and current_user.role == UserRole.OWNER.value:
         user.manager_id = user_in.manager_id
     if user_in.is_active is not None:
@@ -409,6 +418,12 @@ async def activate_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
+    if current_user.role != UserRole.OWNER.value:
+        if user.role in [UserRole.OWNER.value, UserRole.MANAGER.value]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the CEO can modify Admin/Owner accounts.")
+        if user.manager_id != current_user.id and user.created_by_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Employee outside your team.")
+
     user.is_active = True
     await log_audit_event(
         db=db,
@@ -435,6 +450,15 @@ async def deactivate_user(
 
     if user.id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot deactivate your own account.")
+
+    if user.role == UserRole.OWNER.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CEO / Owner account cannot be deactivated.")
+
+    if current_user.role != UserRole.OWNER.value:
+        if user.role == UserRole.MANAGER.value:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the CEO can deactivate Admin accounts.")
+        if user.manager_id != current_user.id and user.created_by_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Employee outside your team.")
 
     user.is_active = False
 
@@ -699,11 +723,17 @@ async def delete_user(
             detail="CEO / Owner account cannot be deleted.",
         )
 
-    if current_user.role != UserRole.OWNER.value and target_user.role == UserRole.MANAGER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the CEO can delete Admin accounts.",
-        )
+    if current_user.role != UserRole.OWNER.value:
+        if target_user.role == UserRole.MANAGER.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the CEO can delete Admin accounts.",
+            )
+        if target_user.manager_id != current_user.id and target_user.created_by_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: You can only delete employees under your supervision.",
+            )
 
     deleted_info = {
         "deleted_user_id": target_user.id,
@@ -713,8 +743,28 @@ async def delete_user(
         "deleted_by": current_user.username,
     }
 
+    # Clean up dependent rows explicitly for both SQLite (no FK cascade) and PostgreSQL compatibility
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == target_user.id))
+    await db.execute(delete(FieldVisit).where(FieldVisit.employee_id == target_user.id))
+    await db.execute(update(FieldVisit).where(FieldVisit.reviewed_by_id == target_user.id).values(reviewed_by_id=None))
+    await db.execute(delete(Attendance).where(Attendance.user_id == target_user.id))
+    await db.execute(delete(EmployeeTarget).where(EmployeeTarget.employee_id == target_user.id))
+    await db.execute(update(EmployeeTarget).where(EmployeeTarget.created_by_id == target_user.id).values(created_by_id=None))
+    await db.execute(update(Customer).where(Customer.assigned_employee_id == target_user.id).values(assigned_employee_id=None))
+    await db.execute(delete(Customer).where(Customer.created_by_id == target_user.id))
+    await db.execute(delete(ChatMessage).where(ChatMessage.sender_id == target_user.id))
+    room_ids_subq = select(ChatRoom.id).where(
+        or_(ChatRoom.participant_1_id == target_user.id, ChatRoom.participant_2_id == target_user.id)
+    )
+    await db.execute(delete(ChatMessage).where(ChatMessage.room_id.in_(room_ids_subq)))
+    await db.execute(
+        delete(ChatRoom).where(
+            or_(ChatRoom.participant_1_id == target_user.id, ChatRoom.participant_2_id == target_user.id)
+        )
+    )
+    await db.execute(update(ChatRoom).where(ChatRoom.created_by_id == target_user.id).values(created_by_id=None))
     await db.execute(update(User).where(User.manager_id == target_user.id).values(manager_id=None))
+    await db.execute(update(User).where(User.created_by_id == target_user.id).values(created_by_id=None))
     await db.delete(target_user)
 
     await log_audit_event(

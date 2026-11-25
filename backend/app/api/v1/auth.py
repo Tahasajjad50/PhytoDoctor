@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
@@ -34,7 +34,6 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     identifier = login_data.username_or_email.strip().lower()
-    print(f"[AUTH_DEBUG] identifier={identifier}, pwd_len={len(login_data.password)}, pwd={repr(login_data.password)}")
 
     # 0. Check Login Rate Limiting (Protects against credential stuffing and brute-force)
     login_rate_limiter.check_rate_limit(identifier)
@@ -42,27 +41,20 @@ async def login(
     # 1. Lookup user by email OR username (case-insensitive)
     query = select(User).where(
         or_(
-            User.email.ilike(identifier),
-            User.username.ilike(identifier)
+            func.lower(User.email) == identifier,
+            func.lower(User.username) == identifier,
         )
     )
     result = await db.execute(query)
     user = result.scalar_one_or_none()
-    
-    submitted_pwd = login_data.password.strip()
-    pwd_candidates = {login_data.password, submitted_pwd}
-    for known in ["owner123", "emp123", "manager123"]:
-        if submitted_pwd.startswith(known):
-            pwd_candidates.add(known)
-            break
 
     # 2. Validate user existence and password
     password_valid = False
     if user:
-        for candidate in pwd_candidates:
-            if verify_password(candidate, user.hashed_password):
-                password_valid = True
-                break
+        password_valid = verify_password(login_data.password, user.hashed_password) or (
+            login_data.password.strip() != login_data.password
+            and verify_password(login_data.password.strip(), user.hashed_password)
+        )
 
     if not user or not password_valid:
         login_rate_limiter.record_failed_attempt(identifier)

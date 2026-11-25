@@ -230,12 +230,22 @@ async def push_update_to_all_users(
         config.latest_version = body.latest_version.strip()
     if body.latest_build_number is not None:
         config.latest_build_number = body.latest_build_number
-        config.min_required_build_number = body.min_required_build_number or body.latest_build_number
+        config.min_required_build_number = (
+            body.min_required_build_number
+            if body.min_required_build_number is not None
+            else body.latest_build_number
+        )
     elif body.min_required_build_number is not None:
         config.min_required_build_number = body.min_required_build_number
     config.force_update = True if body.force_update is None else body.force_update
-    config.title = (body.title.strip() if body.title and body.title.strip() else "Update Available")
-    config.message = (body.message.strip() if body.message and body.message.strip() else f"Version {config.latest_version} is available. Please update.")
+    if body.title is not None and body.title.strip():
+        config.title = body.title.strip()
+    elif not config.title:
+        config.title = "Update Available"
+    if body.message is not None and body.message.strip():
+        config.message = body.message.strip()
+    elif not config.message:
+        config.message = f"Version {config.latest_version} is available. Please update."
     if body.release_notes is not None:
         config.release_notes = body.release_notes.strip()
     if body.download_url is not None and body.download_url.strip():

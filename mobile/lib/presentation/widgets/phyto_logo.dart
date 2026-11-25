@@ -89,28 +89,34 @@ class PhytoDoctorLogo extends StatelessWidget {
       children: [
         _fallbackIcon(42),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Text(
-              'PHYTO DOCTOR',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: AppTheme.botanicalDark,
-                letterSpacing: 0.5,
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                'PHYTO DOCTOR',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.botanicalDark,
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
-            Text(
-              'Agri-Biotech Company of Pakistan',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textMuted,
+              Text(
+                'Agri-Biotech Company',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textMuted,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );

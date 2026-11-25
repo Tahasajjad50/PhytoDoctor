@@ -123,16 +123,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          isOwner
-                              ? 'Direct Message Anyone'
-                              : isManager
-                                  ? 'Message Assigned Employee / CEO'
-                                  : 'Message Admin / CEO',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textMain,
+                        Expanded(
+                          child: Text(
+                            isOwner
+                                ? 'Direct Message Anyone'
+                                : isManager
+                                    ? 'Message Assigned Employee / CEO'
+                                    : 'Message Admin / CEO',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textMain,
+                            ),
                           ),
                         ),
                         IconButton(
@@ -384,22 +387,27 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              isOwner
-                                  ? 'All Employee & Admin Conversations'
-                                  : 'Direct Staff & Admin Chats',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textMuted,
-                                letterSpacing: 0.5,
+                            Expanded(
+                              child: Text(
+                                isOwner
+                                    ? 'All Employee & Admin Conversations'
+                                    : 'Direct Staff & Admin Chats',
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.textMuted,
+                                  letterSpacing: 0.5,
+                                ),
                               ),
                             ),
-                            if (!isEmployee)
+                            if (!isEmployee) ...[
+                              const SizedBox(width: 8),
                               Text(
                                 '${_rooms.where((r) => r.isDirect).length} active',
                                 style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                               ),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -423,8 +431,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   isEmployee
-                                      ? 'Tap "Message Admin" below to start chatting with your supervisor or CEO.'
-                                      : 'Direct 1-on-1 messages between employees and managers will appear here.',
+                                      ? 'Tap "Message Admin" below to start a chat.'
+                                      : 'Direct chats will appear here.',
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                                 ),

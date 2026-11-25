@@ -431,10 +431,12 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                           ),
                           const SizedBox(width: 10),
                           SizedBox(
-                            width: 65,
+                            width: 82,
                             child: Text(
-                              '$verified / $target ($pct%)',
+                              '$verified/$target (${pct.toStringAsFixed(0)}%)',
                               textAlign: TextAlign.end,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textMain),
                             ),
                           ),
@@ -489,10 +491,15 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                clientName,
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+                              Expanded(
+                                child: Text(
+                                  clientName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(

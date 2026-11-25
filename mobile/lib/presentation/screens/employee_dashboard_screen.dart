@@ -287,7 +287,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           children: const [
             PhytoDoctorLogo(compactIconOnly: true, width: 28, height: 28),
             SizedBox(width: 10),
-            Text('Field Agronomist Hub'),
+            Expanded(
+              child: Text(
+                'Field Agronomist Hub',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -305,8 +311,10 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Metrics',
-            onPressed: _loadDashboardData,
+            tooltip: 'Refresh',
+            onPressed: () async {
+              await Future.wait([_loadDashboardData(), _loadAttendanceStatus()]);
+            },
           ),
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
@@ -329,12 +337,14 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
             if (_isOffline)
               OfflineBanner(
                 pendingCount: _pendingSyncCount,
-                onSyncTap: _loadDashboardData,
+                onSyncTap: _triggerManualSync,
               ),
 
             Expanded(
               child: RefreshIndicator(
-                onRefresh: _loadDashboardData,
+                onRefresh: () async {
+                  await Future.wait([_loadDashboardData(), _loadAttendanceStatus()]);
+                },
                 color: AppTheme.botanicalPrimary,
                 child: SingleChildScrollView(
                             physics: const AlwaysScrollableScrollPhysics(),
@@ -420,28 +430,35 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Row(
-                                            children: [
-                                              Container(
-                                                width: 10,
-                                                height: 10,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.textMuted,
+                                          Expanded(
+                                            child: Row(
+                                              children: [
+                                                Container(
+                                                  width: 10,
+                                                  height: 10,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.textMuted,
+                                                  ),
                                                 ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                _isAttendanceActive ? 'PORTAL STATUS: ACTIVE ON DUTY' : 'PORTAL STATUS: OFF DUTY',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.textMuted,
-                                                  letterSpacing: 0.5,
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    _isAttendanceActive ? 'STATUS: ON DUTY' : 'STATUS: OFF DUTY',
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: _isAttendanceActive ? AppTheme.cropGreen : AppTheme.textMuted,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
+                                          const SizedBox(width: 8),
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
@@ -500,7 +517,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         icon: _isTogglingAttendance
                                             ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                             : Icon(_isAttendanceActive ? Icons.logout : Icons.how_to_reg, size: 18),
-                                        label: Text(_isAttendanceActive ? 'Mark as Inactive (Clock Out)' : 'Mark as Active (Clock In)'),
+                                        label: Text(_isAttendanceActive ? 'Clock Out' : 'Clock In'),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: _isAttendanceActive ? AppTheme.adminSlate : AppTheme.botanicalPrimary,
                                           foregroundColor: Colors.white,
@@ -548,22 +565,29 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Row(
-                                              children: const [
-                                                Text(
-                                                  "Today's Visit Target Progress",
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppTheme.textMain,
+                                            Expanded(
+                                              child: Row(
+                                                children: const [
+                                                  Flexible(
+                                                    child: Text(
+                                                      "Today's Visit Target",
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: AppTheme.textMain,
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
-                                                SizedBox(width: 4),
-                                                Icon(Icons.chevron_right, size: 18, color: AppTheme.botanicalPrimary),
-                                              ],
+                                                  SizedBox(width: 4),
+                                                  Icon(Icons.chevron_right, size: 18, color: AppTheme.botanicalPrimary),
+                                                ],
+                                              ),
                                             ),
+                                            const SizedBox(width: 8),
                                             Text(
-                                              '$_verifiedVisits / $_todayTarget Visits',
+                                              '$_verifiedVisits / $_todayTarget',
                                               style: const TextStyle(
                                                 fontSize: 14,
                                                 fontWeight: FontWeight.w800,
@@ -587,20 +611,29 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              '${(progressRatio * 100).toStringAsFixed(0)}% Target Achieved',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppTheme.textMuted,
-                                                fontWeight: FontWeight.w600,
+                                            Flexible(
+                                              child: Text(
+                                                '${(progressRatio * 100).toStringAsFixed(0)}% Achieved',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppTheme.textMuted,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                               ),
                                             ),
-                                            Text(
-                                              '$_remainingVisits Visits Remaining',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppTheme.earthAmber,
-                                                fontWeight: FontWeight.w700,
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                '$_remainingVisits Remaining',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppTheme.earthAmber,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -895,25 +928,30 @@ class _OfflineSyncPanel extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    pending > 0 ? Icons.cloud_queue : Icons.cloud_done,
-                    color: pending > 0 ? AppTheme.earthAmber : AppTheme.cropGreen,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    pending > 0
-                        ? '$pending Visit(s) in Queue'
-                        : 'All Visits Synced',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: pending > 0 ? AppTheme.textMain : AppTheme.cropGreen,
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      pending > 0 ? Icons.cloud_queue : Icons.cloud_done,
+                      color: pending > 0 ? AppTheme.earthAmber : AppTheme.cropGreen,
+                      size: 22,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        pending > 0
+                            ? '$pending Visit(s) in Queue'
+                            : 'All Visits Synced',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: pending > 0 ? AppTheme.textMain : AppTheme.cropGreen,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               if (pending > 0 || isSyncing)
                 ElevatedButton.icon(

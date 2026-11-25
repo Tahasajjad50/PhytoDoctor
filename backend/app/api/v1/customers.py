@@ -66,10 +66,17 @@ async def create_customer(
             assigned_emp_id = matched.id
             assigned_emp_name = matched.full_name
 
+    cust_type = data.customer_type.strip().upper()
+    if cust_type not in {"FARMER", "DEALER", "RETAILER"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="customer_type must be FARMER, DEALER, or RETAILER.",
+        )
+
     new_cust = Customer(
         name=data.name.strip(),
         phone=data.phone.strip() if data.phone else None,
-        customer_type=data.customer_type.upper(),
+        customer_type=cust_type,
         territory=data.territory.strip(),
         address=data.address.strip() if data.address else None,
         crop_focus=data.crop_focus.strip() if data.crop_focus else None,

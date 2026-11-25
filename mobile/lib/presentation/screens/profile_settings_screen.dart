@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/storage/secure_storage_service.dart';
+import '../../core/sync/offline_sync_manager.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/repositories/real_visit_repository.dart';
 import 'portal_selection_screen.dart';
 
-class ProfileSettingsScreen extends StatelessWidget {
+class ProfileSettingsScreen extends StatefulWidget {
   final UserModel user;
 
   const ProfileSettingsScreen({Key? key, required this.user}) : super(key: key);
+
+  @override
+  State<ProfileSettingsScreen> createState() => _ProfileSettingsScreenState();
+}
+
+class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
+  final OfflineSyncManager _syncManager = OfflineSyncManager();
+  bool _isSyncing = false;
+
+  UserModel get user => widget.user;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncManager.refreshCounts();
+  }
 
   void _confirmSignOut(BuildContext context) {
     showDialog(
@@ -30,6 +49,7 @@ class ProfileSettingsScreen extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () async {
+              AuthService().logout();
               await SecureStorageService().clearAll();
               if (!context.mounted) return;
               Navigator.pop(context);
@@ -42,6 +62,7 @@ class ProfileSettingsScreen extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.alertCrimson,
               foregroundColor: Colors.white,
+              minimumSize: const Size(90, 42),
             ),
             child: const Text('Sign Out'),
           ),
@@ -153,12 +174,12 @@ class ProfileSettingsScreen extends StatelessWidget {
                       _ProfileDetailRow(label: 'Contact Phone', value: user.phone!),
                     ],
                     const Divider(),
-                    _ProfileDetailRow(label: isOwner ? 'Operations Scope' : 'Field Territory', value: territory),
+                    _ProfileDetailRow(label: isOwner ? 'Scope' : 'Territory', value: territory),
                     if (!isOwner) ...[
                       const Divider(),
                       _ProfileDetailRow(
-                        label: 'Reporting Line',
-                        value: isManager ? 'Mehmood Ayyaz (CEO)' : 'Farhan Qureshi (Regional Manager)',
+                        label: 'Role',
+                        value: user.role,
                       ),
                     ],
                   ],
@@ -168,68 +189,101 @@ class ProfileSettingsScreen extends StatelessWidget {
               const SizedBox(height: 18),
 
               // Offline Sync Queue Diagnostics
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceCard,
-                  borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
-                  border: Border.all(color: AppTheme.sageBorder),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Offline Storage & Background Sync',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textMain,
-                      ),
+              ListenableBuilder(
+                listenable: _syncManager,
+                builder: (context, _) {
+                  final pending = _syncManager.pendingCount;
+                  return Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceCard,
+                      borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+                      border: Border.all(color: AppTheme.sageBorder),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text('Pending Offline Queue:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                        Text('0 Visits (Fully Synced)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.cropGreen)),
-                      ],
-                    ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text('Local SQLite Database:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                        Text('Active & Healthy', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain)),
-                      ],
-                    ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text('Client Catalog Cache:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                        Text('142 Dealers Cached', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Offline queue synchronized with Phyto Doctor server!'),
-                            backgroundColor: AppTheme.cropGreen,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Offline Storage & Sync',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textMain,
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.sync, size: 18),
-                      label: const Text('Force Cloud Sync Now'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.botanicalPrimary,
-                        side: const BorderSide(color: AppTheme.botanicalPrimary),
-                        minimumSize: const Size(double.infinity, 44),
-                      ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Flexible(
+                              child: Text('Offline Queue:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted), overflow: TextOverflow.ellipsis),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                pending == 0 ? '0 Pending (Synced)' : '$pending Pending',
+                                textAlign: TextAlign.end,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: pending == 0 ? AppTheme.cropGreen : AppTheme.earthAmber,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Flexible(
+                              child: Text('Local Storage:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted), overflow: TextOverflow.ellipsis),
+                            ),
+                            SizedBox(width: 8),
+                            Text('Active', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain)),
+                          ],
+                        ),
+                        if (pending > 0 || _isSyncing) ...[
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: _isSyncing
+                                ? null
+                                : () async {
+                                    setState(() => _isSyncing = true);
+                                    try {
+                                      final token = user.accessToken ?? '';
+                                      final count = await _syncManager.syncNow(
+                                        repository: RealVisitRepository(),
+                                        token: token,
+                                        forceRetryAll: true,
+                                      );
+                                      if (!mounted) return;
+                                      ScaffoldMessenger.of(this.context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(count > 0 ? 'Synced $count visit(s).' : 'Sync complete.'),
+                                          backgroundColor: AppTheme.cropGreen,
+                                        ),
+                                      );
+                                    } finally {
+                                      if (mounted) setState(() => _isSyncing = false);
+                                    }
+                                  },
+                            icon: _isSyncing
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.sync, size: 18),
+                            label: Text(_isSyncing ? 'Syncing...' : 'Sync Pending Visits'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.botanicalPrimary,
+                              side: const BorderSide(color: AppTheme.botanicalPrimary),
+                              minimumSize: const Size(double.infinity, 44),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
 
               const SizedBox(height: 24),
@@ -238,7 +292,7 @@ class ProfileSettingsScreen extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () => _confirmSignOut(context),
                 icon: const Icon(Icons.logout),
-                label: Text(isOwner || isManager ? 'Sign Out of Account' : 'Sign Out of Field Device'),
+                label: const Text('Sign Out'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.alertCrimson,
                   foregroundColor: Colors.white,

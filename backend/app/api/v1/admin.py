@@ -261,6 +261,16 @@ async def export_audit_report(
                     max_len = len(val)
             ws.column_dimensions[col_letter].width = min(max(max_len + 4, 14), 52)
 
+    def safe_cell(val):
+        if isinstance(val, str) and val and val[0] in ("=", "+", "-", "@", "\t", "\r"):
+            return "'" + val
+        return val
+
+    def make_utc_aware(dt):
+        if dt is None:
+            return None
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
     # --- Sheet 1: Visit Records ---
     ws_visits = wb.active
     ws_visits.title = "Visit Records"
@@ -272,13 +282,14 @@ async def export_audit_report(
     ])
     for v in visits_list:
         emp = user_map.get(v.employee_id)
-        cap_str = v.device_capture_time.strftime("%Y-%m-%d %H:%M:%S") if v.device_capture_time else ""
+        cap_dt = make_utc_aware(v.device_capture_time)
+        cap_str = cap_dt.strftime("%Y-%m-%d %H:%M:%S") if cap_dt else ""
         ws_visits.append([
             v.id,
-            emp.full_name if emp else "Unknown",
-            emp.username if emp else "",
-            v.client_name,
-            v.client_phone or "",
+            safe_cell(emp.full_name if emp else "Unknown"),
+            safe_cell(emp.username if emp else ""),
+            safe_cell(v.client_name),
+            safe_cell(v.client_phone or ""),
             cap_str,
             round(v.latitude, 6),
             round(v.longitude, 6),
@@ -286,8 +297,8 @@ async def export_audit_report(
             round(v.gps_accuracy, 2),
             "Yes" if v.is_mock_location else "No",
             v.status,
-            v.review_reason or "",
-            v.notes or "",
+            safe_cell(v.review_reason or ""),
+            safe_cell(v.notes or ""),
             v.photo_url or "",
         ])
     auto_fit(ws_visits)
@@ -301,22 +312,27 @@ async def export_audit_report(
     ])
     for a in attendance_list:
         emp = user_map.get(a.user_id)
-        mark_in_str = a.clock_in_time.strftime("%Y-%m-%d %H:%M:%S") if a.clock_in_time else ""
-        mark_out_str = a.clock_out_time.strftime("%Y-%m-%d %H:%M:%S") if a.clock_out_time else "Still Clocked In"
+        cin = make_utc_aware(a.clock_in_time)
+        cout = make_utc_aware(a.clock_out_time)
+        mark_in_str = cin.strftime("%Y-%m-%d %H:%M:%S") if cin else ""
+        mark_out_str = cout.strftime("%Y-%m-%d %H:%M:%S") if cout else "Still Clocked In"
         hours_str = "Active"
-        if a.clock_in_time and a.clock_out_time:
-            diff_hrs = (a.clock_out_time - a.clock_in_time).total_seconds() / 3600.0
+        if cin and cout:
+            diff_hrs = (cout - cin).total_seconds() / 3600.0
             hours_str = f"{diff_hrs:.2f} hrs"
 
         day_visits = visits_by_emp_day.get((a.user_id, a.date), [])
-        day_visits_sorted = sorted(day_visits, key=lambda x: x.device_capture_time)
+        day_visits_sorted = sorted(
+            day_visits,
+            key=lambda x: make_utc_aware(x.device_capture_time) or datetime.min.replace(tzinfo=timezone.utc),
+        )
         first_gps = f"{day_visits_sorted[0].latitude:.6f}, {day_visits_sorted[0].longitude:.6f}" if day_visits_sorted else "N/A"
         last_gps = f"{day_visits_sorted[-1].latitude:.6f}, {day_visits_sorted[-1].longitude:.6f}" if day_visits_sorted else "N/A"
 
         ws_att.append([
             a.date.strftime("%Y-%m-%d") if a.date else "",
-            emp.full_name if emp else "Unknown",
-            emp.username if emp else "",
+            safe_cell(emp.full_name if emp else "Unknown"),
+            safe_cell(emp.username if emp else ""),
             mark_in_str,
             mark_out_str,
             hours_str,
@@ -337,10 +353,10 @@ async def export_audit_report(
         u_visits = [v for v in visits_list if v.employee_id == u.id]
         u_att = [a for a in attendance_list if a.user_id == u.id]
         ws_summary.append([
-            u.full_name,
-            u.username,
+            safe_cell(u.full_name),
+            safe_cell(u.username),
             u.role,
-            u.designation or "",
+            safe_cell(u.designation or ""),
             len(u_att),
             len(u_visits),
             sum(1 for v in u_visits if v.status == VisitStatus.VERIFIED.value),

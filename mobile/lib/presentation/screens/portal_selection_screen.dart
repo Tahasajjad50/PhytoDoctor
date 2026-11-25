@@ -75,7 +75,7 @@ class _PortalSelectionScreenState extends State<PortalSelectionScreen> {
                       children: const [
                         Icon(Icons.badge, size: 20),
                         SizedBox(width: 10),
-                        Text('Employee Login'),
+                        Flexible(child: Text('Employee Login', overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                   ),
@@ -105,7 +105,7 @@ class _PortalSelectionScreenState extends State<PortalSelectionScreen> {
                       children: const [
                         Icon(Icons.admin_panel_settings, size: 20),
                         SizedBox(width: 10),
-                        Text('Admin Login'),
+                        Flexible(child: Text('Admin Login', overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                   ),
@@ -118,12 +118,15 @@ class _PortalSelectionScreenState extends State<PortalSelectionScreen> {
                     children: const [
                       Icon(Icons.lock_outline, size: 14, color: AppTheme.textMuted),
                       SizedBox(width: 6),
-                      Text(
-                        'Authorized Personnel Only • No Public Registration',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textMuted,
+                      Flexible(
+                        child: Text(
+                          'Authorized Personnel Only',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppTheme.textMuted,
+                          ),
                         ),
                       ),
                     ],

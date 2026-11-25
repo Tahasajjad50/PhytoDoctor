@@ -159,20 +159,26 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_outlined, size: 16, color: AppTheme.botanicalPrimary),
-              const SizedBox(width: 8),
-              Text(
-                dateStr,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textMain,
+          Expanded(
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined, size: 16, color: AppTheme.botanicalPrimary),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    dateStr,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textMain,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
           Row(
             children: [
               Container(
@@ -512,12 +518,15 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> {
             children: [
               Icon(icon, size: 12, color: color),
               const SizedBox(width: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.textMuted,
-                  fontWeight: FontWeight.w500,
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],

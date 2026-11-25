@@ -151,9 +151,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
     );
   }
 
-  bool get _isMehmood =>
-      user.username.toLowerCase() == 'mehmoodayyaz' ||
-      user.email.toLowerCase().contains('mehmood');
+  bool get _isCEO => user.isOwner;
 
   Future<void> _openGoogleMaps(BuildContext context, double lat, double lng) async {
     final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Visit+Location)');
@@ -298,14 +296,19 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Account: ${user.email}',
-                            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                          Expanded(
+                            child: Text(
+                              'Account: ${user.email}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: const [
-                              Text('View Profile', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.botanicalPrimary)),
+                              Text('Profile', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.botanicalPrimary)),
                               SizedBox(width: 2),
                               Icon(Icons.arrow_forward_ios, size: 10, color: AppTheme.botanicalPrimary),
                             ],
@@ -466,7 +469,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               const SizedBox(height: 10),
 
               // Account Management Directory (CEO: full company accounts + add admin; Manager: supervised accounts)
-              if (_isMehmood) ...[
+              if (_isCEO) ...[
                 _AdminTile(
                   icon: Icons.admin_panel_settings,
                   title: 'Add Account & Assign Role',
@@ -721,25 +724,27 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                         Expanded(child: Text('Excel Report Ready', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
                       ],
                     ),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Exported "$label" Excel workbook (.xlsx) containing Visit Records, Daily Attendance, Mark-In/Out times, and GPS coordinates.', style: const TextStyle(fontSize: 13)),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppTheme.warmOffWhite,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: AppTheme.sageBorder),
+                    content: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Exported "$label" report (.xlsx).', style: const TextStyle(fontSize: 13)),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warmOffWhite,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: AppTheme.sageBorder),
+                            ),
+                            child: Text(
+                              'Saved to:\n$savedPath',
+                              style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                            ),
                           ),
-                          child: Text(
-                            'Saved to:\n$savedPath',
-                            style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     actions: [
                       TextButton(
@@ -764,6 +769,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.botanicalPrimary,
                           side: const BorderSide(color: AppTheme.botanicalPrimary),
+                          minimumSize: const Size(80, 40),
                         ),
                       ),
                       ElevatedButton.icon(
@@ -785,6 +791,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.botanicalPrimary,
                           foregroundColor: Colors.white,
+                          minimumSize: const Size(80, 40),
                         ),
                       ),
                     ],
@@ -820,9 +827,11 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                   ),
                 ],
               ),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 400,
+              content: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 420,
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.55,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -1266,10 +1275,11 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                                 'is_active': true,
                               }),
                             );
+                            if (!mounted) return;
                             Navigator.pop(dialogCtx);
                             if (res.statusCode == 201 || res.statusCode == 200) {
                               _showAdminCreatedConfirmation(
-                                context,
+                                this.context,
                                 role: chosenRole,
                                 name: nameCtrl.text.trim(),
                                 phone: phoneCtrl.text.trim(),
@@ -1280,7 +1290,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                               );
                             } else {
                               final body = jsonDecode(res.body);
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              ScaffoldMessenger.of(this.context).showSnackBar(
                                 SnackBar(
                                   content: Text(body['detail'] ?? 'Could not create account.'),
                                   backgroundColor: AppTheme.alertCrimson,
@@ -1288,8 +1298,9 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                               );
                             }
                           } catch (e) {
+                            if (!mounted) return;
                             Navigator.pop(dialogCtx);
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
                                 content: Text('Error connecting to server: ${e.toString()}'),
                                 backgroundColor: AppTheme.alertCrimson,
@@ -1300,6 +1311,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.botanicalPrimary,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(120, 42),
                   ),
                   child: isSubmitting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -1334,43 +1346,50 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
           children: [
             const Icon(Icons.check_circle, color: AppTheme.cropGreen, size: 22),
             const SizedBox(width: 8),
-            Text(isManager ? 'Admin Account Saved' : 'Employee Account Saved', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.cropGreenLight,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'Successfully Saved to PhytoDoctor Database',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.cropGreen),
+            Expanded(
+              child: Text(
+                isManager ? 'Admin Account Saved' : 'Employee Account Saved',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
             ),
-            const SizedBox(height: 10),
-            Text('Name: $name', style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('Phone: $phone'),
-            const SizedBox(height: 4),
-            Text('Designation: $designation'),
-            const SizedBox(height: 4),
-            Text('Role: $roleTitle', style: const TextStyle(color: AppTheme.botanicalPrimary, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('Assigned Portal: $portalTitle', style: TextStyle(color: isManager ? AppTheme.adminSlate : AppTheme.cropGreen, fontWeight: FontWeight.w700)),
-            const Divider(height: 18),
-            const Text('Login Credentials:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
-            const SizedBox(height: 4),
-            Text('Username: $username', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textMain)),
-            const SizedBox(height: 4),
-            Text('Email: $email', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textMain)),
-            const SizedBox(height: 4),
-            Text('Password: $password', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.alertCrimson)),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.cropGreenLight,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'Saved to PhytoDoctor Database',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppTheme.cropGreen),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text('Name: $name', style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('Phone: $phone'),
+              const SizedBox(height: 4),
+              Text('Designation: $designation'),
+              const SizedBox(height: 4),
+              Text('Role: $roleTitle', style: const TextStyle(color: AppTheme.botanicalPrimary, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('Assigned Portal: $portalTitle', style: TextStyle(color: isManager ? AppTheme.adminSlate : AppTheme.cropGreen, fontWeight: FontWeight.w700)),
+              const Divider(height: 18),
+              const Text('Login Credentials:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.textMuted)),
+              const SizedBox(height: 4),
+              Text('Username: $username', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textMain)),
+              const SizedBox(height: 4),
+              Text('Email: $email', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textMain)),
+              const SizedBox(height: 4),
+              Text('Password: $password', style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.alertCrimson)),
+            ],
+          ),
         ),
         actions: [
           ElevatedButton.icon(
@@ -1379,6 +1398,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.botanicalPrimary,
               foregroundColor: Colors.white,
+              minimumSize: const Size(140, 42),
             ),
             onPressed: () async {
               final shareText = '''🌿 PhytoDoctor Account Credentials 🌿
@@ -1398,8 +1418,8 @@ Password: $password
                 text: shareText,
                 subject: 'PhytoDoctor Account Credentials - $name',
               );
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+              if (this.context.mounted) {
+                ScaffoldMessenger.of(this.context).showSnackBar(
                   const SnackBar(
                     content: Text('Credentials ready to share or paste!'),
                     backgroundColor: AppTheme.cropGreen,
@@ -1408,9 +1428,9 @@ Password: $password
               }
             },
           ),
-          const SizedBox(width: 8),
           OutlinedButton(
             onPressed: () => Navigator.pop(ctx),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(76, 42)),
             child: const Text('OK'),
           ),
         ],
@@ -1433,7 +1453,9 @@ Password: $password
               children: const [
                 Icon(Icons.flag, color: AppTheme.botanicalPrimary, size: 22),
                 SizedBox(width: 8),
-                Text('Set Monthly Quotas & Targets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                Expanded(
+                  child: Text('Set Monthly Quotas & Targets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                ),
               ],
             ),
             content: SingleChildScrollView(
@@ -1490,7 +1512,7 @@ Password: $password
 
                         try {
                           final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/targets/quotas');
-                          await http.post(
+                          final res = await http.post(
                             url,
                             headers: {
                               'Content-Type': 'application/json',
@@ -1502,27 +1524,39 @@ Password: $password
                               'month': periodMonth,
                             }),
                           );
-                        } catch (_) {}
-
-                        if (mounted) {
+                          if (res.statusCode != 200 && res.statusCode != 201) {
+                            throw Exception('Server returned ${res.statusCode}');
+                          }
+                          if (!mounted) return;
                           setState(() {
                             _activeDailyTarget = visits;
                             _activeMonthlySales = sales;
                             _activeQuotaMonth = periodMonth;
                           });
+                          Navigator.pop(dialogCtx);
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(
+                              content: Text('Targets saved: $visits visits/day, PKR $sales ($periodMonth)'),
+                              backgroundColor: AppTheme.cropGreen,
+                            ),
+                          );
+                        } catch (e) {
+                          if (dialogCtx.mounted) {
+                            setDialogState(() => isSaving = false);
+                          }
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to save targets: ${e.toString().replaceAll('Exception: ', '')}'),
+                              backgroundColor: AppTheme.alertCrimson,
+                            ),
+                          );
                         }
-
-                        Navigator.pop(dialogCtx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Targets Saved! Daily: $visits visits/day, Sales: PKR ${sales.toString()} for $periodMonth'),
-                            backgroundColor: AppTheme.cropGreen,
-                          ),
-                        );
                       },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.botanicalPrimary,
                   foregroundColor: Colors.white,
+                  minimumSize: const Size(120, 42),
                 ),
                 child: isSaving
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -1652,6 +1686,7 @@ Password: $password
                         final custAddress = addressCtrl.text.trim();
 
                         String assignedOfficerName = 'Nearest Territory Agronomist';
+                        String? customerError;
                         try {
                           final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/customers/');
                           final res = await http.post(
@@ -1669,43 +1704,61 @@ Password: $password
                               'latitude': 30.1575,
                               'longitude': 71.5249,
                             }),
-                          );
+                          ).timeout(const Duration(seconds: 15));
                           if (res.statusCode == 201 || res.statusCode == 200) {
                             final data = jsonDecode(res.body);
                             if (data['assigned_employee_name'] != null) {
                               assignedOfficerName = data['assigned_employee_name'];
                             }
+                          } else {
+                            final err = jsonDecode(res.body);
+                            customerError = err['detail']?.toString() ?? 'Failed (${res.statusCode})';
                           }
-                        } catch (_) {}
+                        } catch (e) {
+                          customerError = 'Network error: $e';
+                        }
+
+                        if (!mounted) return;
+                        if (customerError != null) {
+                          setState(() => isSubmitting = false);
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(content: Text(customerError), backgroundColor: AppTheme.alertCrimson),
+                          );
+                          return;
+                        }
 
                         Navigator.pop(dialogCtx);
                         showDialog(
-                          context: context,
+                          context: this.context,
                           builder: (c) => AlertDialog(
                             title: Row(
                               children: const [
                                 Icon(Icons.check_circle, color: AppTheme.cropGreen),
                                 SizedBox(width: 8),
-                                Text('Customer Added', style: TextStyle(fontWeight: FontWeight.bold)),
+                                Expanded(child: Text('Customer Added', style: TextStyle(fontWeight: FontWeight.bold))),
                               ],
                             ),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Customer "$custName" has been registered.', style: const TextStyle(fontWeight: FontWeight.w600)),
-                                const SizedBox(height: 8),
-                                Text('Territory: $territory'),
-                                const SizedBox(height: 4),
-                                Text('Assigned Officer: $assignedOfficerName', style: const TextStyle(color: AppTheme.botanicalPrimary, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
-                                const Text('This customer is now visible in the territory for field visits.', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-                              ],
+                            content: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('"$custName" registered.', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 8),
+                                  Text('Territory: $territory'),
+                                  const SizedBox(height: 4),
+                                  Text('Assigned: $assignedOfficerName', style: const TextStyle(color: AppTheme.botanicalPrimary, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
                             actions: [
                               ElevatedButton(
                                 onPressed: () => Navigator.pop(c),
-                                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.botanicalPrimary, foregroundColor: Colors.white),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.botanicalPrimary,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(80, 42),
+                                ),
                                 child: const Text('OK'),
                               ),
                             ],
@@ -1901,12 +1954,16 @@ class _OwnerKpiCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: color,
+              Expanded(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: color,
+                  ),
                 ),
               ),
               if (onTap != null)

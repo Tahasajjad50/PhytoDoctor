@@ -128,7 +128,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
         return raw[0].toUpperCase() + raw.substring(1);
       }
     }
-    return 'Salman';
+    return 'Field Officer';
   }
 
   String _cleanNotesText(String? raw) {
@@ -250,47 +250,51 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
           children: const [
             Icon(Icons.warning_amber_rounded, color: AppTheme.alertCrimson, size: 26),
             SizedBox(width: 8),
-            Text(
-              'Reject Field Visit',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to reject the visit for "$clientName"?',
-              style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Rejection Reason (Optional):',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
-              decoration: InputDecoration(
-                hintText: 'e.g. Unclear photo proof, location mismatch, client unreachable...',
-                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                contentPadding: const EdgeInsets.all(12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.sageBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.cropGreen),
-                ),
+            Expanded(
+              child: Text(
+                'Reject Field Visit',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain),
               ),
             ),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Reject visit for "$clientName"?',
+                style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Reason (Optional):',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Unclear photo or GPS mismatch',
+                  hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.sageBorder),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.cropGreen),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -302,6 +306,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.alertCrimson,
               foregroundColor: Colors.white,
+              minimumSize: const Size(110, 42),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
             child: const Text('Reject Visit'),
@@ -415,9 +420,9 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(color: AppTheme.adminSlate.withOpacity(0.3)),
                             ),
-                            child: const Text(
-                              'REGIONAL MANAGER',
-                              style: TextStyle(
+                            child: Text(
+                              widget.user.isOwner ? 'CEO / SUPERVISOR' : 'ADMIN',
+                              style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 color: AppTheme.adminSlate,
@@ -430,19 +435,19 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Supervising: Punjab Field Team',
+                              widget.user.designation ?? widget.user.email,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                              style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: const [
-                              Text('View Profile', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.botanicalPrimary)),
+                              Text('Profile', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.botanicalPrimary)),
                               SizedBox(width: 2),
                               Icon(Icons.arrow_forward_ios, size: 10, color: AppTheme.botanicalPrimary),
                             ],
@@ -475,7 +480,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                     child: const Icon(Icons.person_add, color: AppTheme.botanicalPrimary, size: 20),
                   ),
                   title: const Text('Add Customer', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: const Text('Register farm or dealer client & assign to agronomist', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                  subtitle: const Text('Register & assign customer', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMuted),
                   onTap: () => _showAddCustomerDialog(context),
                 ),
@@ -483,7 +488,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
 
               const SizedBox(height: 10),
 
-              // Supervised Employee Accounts Card (Admin can see & change credentials of employees they created)
+              // Supervised Employee Accounts Card
               Card(
                 elevation: 0,
                 color: AppTheme.surfaceCard,
@@ -501,8 +506,8 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                     ),
                     child: const Icon(Icons.manage_accounts, color: AppTheme.adminSlate, size: 20),
                   ),
-                  title: const Text('Supervised Employee Accounts', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: const Text('View & change credentials for employees created by you', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                  title: const Text('Staff Accounts Directory', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  subtitle: const Text('Manage employee credentials', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textMuted),
                   onTap: () {
                     Navigator.push(
@@ -594,9 +599,13 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              Text(
-                                'By: $officerName',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.botanicalPrimary),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'By: $officerName',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.botanicalPrimary),
+                                ),
                               ),
                             ],
                           ),
@@ -632,7 +641,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                       MaterialPageRoute(
                                         builder: (context) => VisitDetailScreen(visit: audit),
                                       ),
-                                    );
+                                    ).then((_) => _loadPendingVisits());
                                   },
                                   child: Container(
                                     height: 120,
@@ -785,7 +794,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                                       MaterialPageRoute(
                                         builder: (context) => VisitDetailScreen(visit: audit),
                                       ),
-                                    );
+                                    ).then((_) => _loadPendingVisits());
                                   },
                                   style: OutlinedButton.styleFrom(
                                     minimumSize: const Size(0, 38),
@@ -1109,6 +1118,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                         final custAddress = addressCtrl.text.trim();
 
                         String assignedOfficerName = 'Nearest Territory Agronomist';
+                        String? customerError;
                         try {
                           final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/customers/');
                           final res = await http.post(
@@ -1126,43 +1136,61 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                               'latitude': 30.1575,
                               'longitude': 71.5249,
                             }),
-                          );
+                          ).timeout(const Duration(seconds: 15));
                           if (res.statusCode == 201 || res.statusCode == 200) {
                             final data = jsonDecode(res.body);
                             if (data['assigned_employee_name'] != null) {
                               assignedOfficerName = data['assigned_employee_name'];
                             }
+                          } else {
+                            final err = jsonDecode(res.body);
+                            customerError = err['detail']?.toString() ?? 'Failed (${res.statusCode})';
                           }
-                        } catch (_) {}
+                        } catch (e) {
+                          customerError = 'Network error: $e';
+                        }
+
+                        if (!mounted) return;
+                        if (customerError != null) {
+                          setState(() => isSubmitting = false);
+                          ScaffoldMessenger.of(this.context).showSnackBar(
+                            SnackBar(content: Text(customerError), backgroundColor: AppTheme.alertCrimson),
+                          );
+                          return;
+                        }
 
                         Navigator.pop(dialogCtx);
                         showDialog(
-                          context: context,
+                          context: this.context,
                           builder: (c) => AlertDialog(
                             title: Row(
                               children: const [
                                 Icon(Icons.check_circle, color: AppTheme.cropGreen),
                                 SizedBox(width: 8),
-                                Text('Customer Added', style: TextStyle(fontWeight: FontWeight.bold)),
+                                Expanded(child: Text('Customer Added', style: TextStyle(fontWeight: FontWeight.bold))),
                               ],
                             ),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Customer "$custName" has been registered.', style: const TextStyle(fontWeight: FontWeight.w600)),
-                                const SizedBox(height: 8),
-                                Text('Territory: $territory'),
-                                const SizedBox(height: 4),
-                                Text('Assigned Officer: $assignedOfficerName', style: const TextStyle(color: AppTheme.botanicalPrimary, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
-                                const Text('This customer is now visible in the territory for field visits.', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
-                              ],
+                            content: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('"$custName" registered.', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 8),
+                                  Text('Territory: $territory'),
+                                  const SizedBox(height: 4),
+                                  Text('Assigned: $assignedOfficerName', style: const TextStyle(color: AppTheme.botanicalPrimary, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
                             actions: [
                               ElevatedButton(
                                 onPressed: () => Navigator.pop(c),
-                                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.botanicalPrimary, foregroundColor: Colors.white),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.botanicalPrimary,
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(80, 42),
+                                ),
                                 child: const Text('OK'),
                               ),
                             ],

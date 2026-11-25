@@ -5,6 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
 from app.models.user import User, UserRole
@@ -87,7 +88,10 @@ async def create_visit(
         review_signals.append("REPORTED_MOCK_LOCATION: Device reported a mock or simulated location signal.")
 
     # C. Device vs Server Clock Drift Calculation
-    clock_drift_sec = (now_utc - visit_in.device_capture_time).total_seconds()
+    capture_dt = visit_in.device_capture_time
+    if capture_dt.tzinfo is None:
+        capture_dt = capture_dt.replace(tzinfo=timezone.utc)
+    clock_drift_sec = (now_utc - capture_dt).total_seconds()
 
     # If device clock is noticeably in the future (> 5 min)
     if clock_drift_sec < -300:
@@ -124,7 +128,7 @@ async def create_visit(
         longitude=visit_in.longitude,
         gps_accuracy=visit_in.gps_accuracy,
         is_mock_location=visit_in.is_mock_location,
-        device_capture_time=visit_in.device_capture_time,
+        device_capture_time=capture_dt,
         server_receipt_time=now_utc,
         photo_asset_id=visit_in.photo_asset_id.strip(),
         photo_url=resolved_photo_url,

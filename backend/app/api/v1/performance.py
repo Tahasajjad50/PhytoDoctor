@@ -190,14 +190,22 @@ async def get_employee_performance_analytics(
     else:
         target_visits = base_target
 
-    # 2. Fetch all visits within date boundaries
+    # 2. Fetch all visits within date boundaries (expand window for 7-day daily trend)
+    trend_start = (anchor_date - timedelta(days=6)) if effective_timeframe == "DAILY" else start_d
+    trend_end = anchor_date if effective_timeframe == "DAILY" else end_d
+    query_start_dt = min(start_dt, datetime.combine(trend_start, time.min, tzinfo=timezone.utc))
+
     visits_query = select(FieldVisit).where(
         FieldVisit.employee_id == employee_id,
-        FieldVisit.device_capture_time >= start_dt,
+        FieldVisit.device_capture_time >= query_start_dt,
         FieldVisit.device_capture_time <= end_dt
     ).order_by(FieldVisit.device_capture_time.desc())
     visits_res = await db.execute(visits_query)
-    period_visits = visits_res.scalars().all()
+    all_window_visits = visits_res.scalars().all()
+    period_visits = [
+        v for v in all_window_visits
+        if start_dt <= make_utc_aware(v.device_capture_time) <= end_dt
+    ]
 
     submitted_visits = len(period_visits)
     verified_visits = sum(1 for v in period_visits if v.status == VisitStatus.VERIFIED.value)
@@ -217,16 +225,13 @@ async def get_employee_performance_analytics(
 
     # 3. Generate Day-by-Day Trend Points
     trend_points: List[TrendPoint] = []
-    # If daily, show past 7 days trend for immediate context; if weekly/monthly, show each day in period
-    trend_start = (anchor_date - timedelta(days=6)) if effective_timeframe == "DAILY" else start_d
-    trend_end = anchor_date if effective_timeframe == "DAILY" else end_d
 
     curr_day = trend_start
     while curr_day <= trend_end:
         day_start = datetime.combine(curr_day, time.min, tzinfo=timezone.utc)
         day_end = datetime.combine(curr_day, time.max, tzinfo=timezone.utc)
 
-        day_visits = [v for v in period_visits if day_start <= make_utc_aware(v.device_capture_time) <= day_end]
+        day_visits = [v for v in all_window_visits if day_start <= make_utc_aware(v.device_capture_time) <= day_end]
         day_submitted = len(day_visits)
         day_verified = sum(1 for v in day_visits if v.status == VisitStatus.VERIFIED.value)
         day_rejected = sum(1 for v in day_visits if v.status == VisitStatus.REJECTED.value)

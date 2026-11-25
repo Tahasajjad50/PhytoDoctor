@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/config/app_config.dart';
 import 'core/models/user_model.dart';
+import 'core/services/auth_service.dart';
 import 'core/services/chat_notification_monitor.dart';
 import 'core/services/notification_service.dart';
 import 'core/storage/secure_storage_service.dart';
@@ -28,6 +29,7 @@ void main() async {
     // Normal reopen -> auto-reopen without credentials prompt
     savedUser = await storage.getUserSession();
     if (savedUser != null && savedUser.isActive) {
+      AuthService.activeSessionUser = savedUser;
       ChatNotificationMonitor().start(savedUser);
     }
   }

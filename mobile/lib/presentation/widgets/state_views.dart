@@ -191,8 +191,10 @@ class OfflineBanner extends StatelessWidget {
           Expanded(
             child: Text(
               pendingCount > 0
-                  ? 'Offline Mode: $pendingCount visit(s) queued for sync'
-                  : 'Offline Mode: Device operating from local cache',
+                  ? 'Offline: $pendingCount queued'
+                  : 'Offline: Cached mode',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_model.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/theme/app_theme.dart';
 
 class EmployeeLocationTrackingScreen extends StatefulWidget {
@@ -13,10 +16,14 @@ class EmployeeLocationTrackingScreen extends StatefulWidget {
 }
 
 class _EmployeeLocationTrackingScreenState extends State<EmployeeLocationTrackingScreen> {
-  // In a clean production state with only the CEO account, no fake devices are shown.
-  // When real field staff log GPS visits, their live coordinate records will be populated here.
   final List<Map<String, dynamic>> _liveEmployees = [];
   bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshFeeds(silent: true);
+  }
 
   Future<void> _openGoogleMaps(double lat, double lng) async {
     final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng(Staff+Location)');
@@ -54,19 +61,63 @@ class _EmployeeLocationTrackingScreenState extends State<EmployeeLocationTrackin
     );
   }
 
-  void _refreshFeeds() {
+  Future<void> _refreshFeeds({bool silent = false}) async {
     setState(() => _isRefreshing = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
+    try {
+      final token = widget.user.accessToken;
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits/?limit=50');
+      final res = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 12));
+
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        final items = decoded is List ? decoded : (decoded['items'] as List? ?? []);
+        final Map<String, Map<String, dynamic>> latestByEmp = {};
+        for (final raw in items) {
+          if (raw is! Map) continue;
+          final empId = (raw['employee_id'] ?? '').toString();
+          if (empId.isEmpty || latestByEmp.containsKey(empId)) continue;
+          final lat = (raw['latitude'] as num?)?.toDouble();
+          final lng = (raw['longitude'] as num?)?.toDouble();
+          if (lat == null || lng == null) continue;
+          final acc = (raw['gps_accuracy'] as num?)?.toDouble() ?? 10.0;
+          latestByEmp[empId] = {
+            'name': (raw['employee_name'] ?? raw['officer'] ?? 'Field Officer').toString(),
+            'status': (raw['status'] ?? 'ACTIVE').toString(),
+            'route': 'Last visit: ${raw['client_name'] ?? 'Field Client'}',
+            'lat': lat,
+            'lng': lng,
+            'accuracy': acc.toStringAsFixed(1),
+            'address': (raw['device_capture_time'] ?? '').toString(),
+          };
+        }
+        if (!mounted) return;
+        setState(() {
+          _liveEmployees
+            ..clear()
+            ..addAll(latestByEmp.values);
+        });
+      }
+    } catch (_) {
+      // Preserve last fetched list on offline error
+    } finally {
       if (mounted) {
         setState(() => _isRefreshing = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS feeds updated: 0 active field devices broadcasting.'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+        if (!silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${_liveEmployees.length} active device(s).'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       }
-    });
+    }
   }
 
   @override
@@ -109,20 +160,27 @@ class _EmployeeLocationTrackingScreenState extends State<EmployeeLocationTrackin
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: const [
-                            Icon(Icons.gps_fixed, size: 20, color: AppTheme.botanicalPrimary),
-                            SizedBox(width: 8),
-                            Text(
-                              'Real-Time GPS Tracking',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textMain,
+                        Expanded(
+                          child: Row(
+                            children: const [
+                              Icon(Icons.gps_fixed, size: 20, color: AppTheme.botanicalPrimary),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Live GPS Tracking',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppTheme.textMain,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(

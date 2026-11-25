@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/services/location_service.dart';
 import '../../core/theme/app_theme.dart';
 
 class GpsAcquisitionScreen extends StatefulWidget {
@@ -21,6 +22,7 @@ class _GpsAcquisitionScreenState extends State<GpsAcquisitionScreen> {
   late double _latitude;
   late double _longitude;
   late double _accuracy;
+  bool _isMock = false;
   bool _isCalibrating = false;
 
   @override
@@ -31,15 +33,22 @@ class _GpsAcquisitionScreenState extends State<GpsAcquisitionScreen> {
     _accuracy = widget.accuracy;
   }
 
-  void _recalibrate() {
+  Future<void> _recalibrate() async {
     setState(() => _isCalibrating = true);
-    Future.delayed(const Duration(seconds: 1), () {
+    try {
+      final result = await LocationService().getCurrentLocation();
       if (!mounted) return;
       setState(() {
+        _latitude = result.latitude;
+        _longitude = result.longitude;
+        _accuracy = result.accuracy;
+        _isMock = result.isMockLocation;
         _isCalibrating = false;
-        _accuracy = 8.6; // Improved satellite lock
       });
-    });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isCalibrating = false);
+    }
   }
 
   void _confirmAndApply() {
@@ -47,7 +56,7 @@ class _GpsAcquisitionScreenState extends State<GpsAcquisitionScreen> {
       'latitude': _latitude,
       'longitude': _longitude,
       'accuracy': _accuracy,
-      'is_mock': false,
+      'is_mock': _isMock,
     });
   }
 

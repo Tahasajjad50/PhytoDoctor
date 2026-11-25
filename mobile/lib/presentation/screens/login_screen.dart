@@ -72,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final isBlocked = await AppUpdateService.checkAndPromptUpdate(context);
-    if (isBlocked) {
+    if (isBlocked || !mounted) {
       return;
     }
 
@@ -124,13 +124,17 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } on AuthException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.message;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'An unexpected connection error occurred. Please verify server status.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Connection error. Please try again.';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -187,13 +191,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: themeColor,
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          isAdminPortal ? 'MANAGEMENT CONSOLE' : 'FIELD AGRONOMIST ACCESS',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                            color: themeColor,
+                        Flexible(
+                          child: Text(
+                            isAdminPortal ? 'MANAGEMENT CONSOLE' : 'FIELD AGRONOMIST ACCESS',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                              color: themeColor,
+                            ),
                           ),
                         ),
                       ],
@@ -336,7 +343,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const Center(
                     child: Text(
-                      'Account issues? Contact your branch manager or IT admin.',
+                      'Contact your admin for account help.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,

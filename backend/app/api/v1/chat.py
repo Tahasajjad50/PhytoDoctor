@@ -27,7 +27,7 @@ async def _ensure_default_rooms(db: AsyncSession, owner_id: Optional[str] = None
     ann_res = await db.execute(
         select(ChatRoom).where(ChatRoom.room_type == ChatRoomType.ANNOUNCEMENT.value)
     )
-    ann_room = ann_res.scalar_one_or_none()
+    ann_room = ann_res.scalars().first()
     if not ann_room:
         ann_room = ChatRoom(
             title=GLOBAL_ANNOUNCEMENT_TITLE,
@@ -40,7 +40,7 @@ async def _ensure_default_rooms(db: AsyncSession, owner_id: Optional[str] = None
     lead_res = await db.execute(
         select(ChatRoom).where(ChatRoom.room_type == ChatRoomType.MANAGEMENT.value)
     )
-    lead_room = lead_res.scalar_one_or_none()
+    lead_room = lead_res.scalars().first()
     if not lead_room:
         lead_room = ChatRoom(
             title=LEADERSHIP_ROOM_TITLE,
@@ -220,7 +220,8 @@ async def get_room_messages(
 
     query = select(ChatMessage).where(ChatMessage.room_id == room_id)
     if after:
-        query = query.where(ChatMessage.created_at > after)
+        after_dt = after.replace(tzinfo=timezone.utc) if after.tzinfo is None else after
+        query = query.where(ChatMessage.created_at > after_dt)
     
     query = query.order_by(ChatMessage.created_at.asc()).limit(limit)
     res = await db.execute(query)
@@ -267,6 +268,13 @@ async def send_message(
         if not is_owner and not is_admin and current_user.id not in [room.participant_1_id, room.participant_2_id]:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this conversation.")
 
+    clean_content = msg_in.content.strip()
+    if not clean_content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message content cannot be blank.",
+        )
+
     is_announcement = (room.room_type == ChatRoomType.ANNOUNCEMENT.value)
 
     new_msg = ChatMessage(
@@ -274,7 +282,7 @@ async def send_message(
         sender_id=current_user.id,
         sender_name=current_user.full_name,
         sender_role=current_user.role,
-        content=msg_in.content.strip(),
+        content=clean_content,
         is_announcement=is_announcement,
         created_at=datetime.now(timezone.utc),
     )

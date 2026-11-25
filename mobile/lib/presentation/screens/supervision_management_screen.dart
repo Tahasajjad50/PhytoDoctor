@@ -291,8 +291,9 @@ class _SupervisionManagementScreenState extends State<SupervisionManagementScree
                                 );
 
                                 if (res.statusCode == 200) {
+                                  if (!mounted) return;
                                   Navigator.pop(sheetCtx);
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  ScaffoldMessenger.of(this.context).showSnackBar(
                                     SnackBar(
                                       content: Text('Reporting hierarchy updated for ${emp['full_name']}'),
                                       backgroundColor: AppTheme.cropGreen,
@@ -304,8 +305,11 @@ class _SupervisionManagementScreenState extends State<SupervisionManagementScree
                                   throw Exception(err['detail'] ?? 'Transfer failed');
                                 }
                               } catch (e) {
-                                setSheetState(() => isSubmitting = false);
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                if (sheetCtx.mounted) {
+                                  setSheetState(() => isSubmitting = false);
+                                }
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(this.context).showSnackBar(
                                   SnackBar(
                                     content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}'),
                                     backgroundColor: AppTheme.alertCrimson,
@@ -492,15 +496,18 @@ class _SupervisionManagementScreenState extends State<SupervisionManagementScree
                                                 children: [
                                                   Text(
                                                     emp['full_name'] ?? emp['username'],
+                                                    overflow: TextOverflow.ellipsis,
                                                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textMain),
                                                   ),
                                                   Text(
                                                     '${emp['designation'] ?? 'Field Agronomist'} • @${emp['username']}',
+                                                    overflow: TextOverflow.ellipsis,
                                                     style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                                                   ),
                                                 ],
                                               ),
                                             ),
+                                            const SizedBox(width: 8),
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                               decoration: BoxDecoration(

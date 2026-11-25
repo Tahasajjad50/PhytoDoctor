@@ -310,18 +310,21 @@ Phone: ${account.phone ?? 'N/A'}
 
                             if (!mounted) return;
                             Navigator.pop(dialogCtx);
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
-                                content: Text('Credentials for ${userCtrl.text} updated successfully!'),
+                                content: Text('Credentials for ${userCtrl.text} updated!'),
                                 backgroundColor: AppTheme.cropGreen,
                               ),
                             );
                             _loadAccounts();
                           } catch (e) {
-                            setDialogState(() {
-                              isSaving = false;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if (dialogCtx.mounted) {
+                              setDialogState(() {
+                                isSaving = false;
+                              });
+                            }
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
                                 content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
                                 backgroundColor: AppTheme.alertCrimson,
@@ -332,6 +335,7 @@ Phone: ${account.phone ?? 'N/A'}
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.botanicalPrimary,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(120, 42),
                   ),
                   child: isSaving
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -476,8 +480,11 @@ Phone: ${account.phone ?? 'N/A'}
                             _showTemporaryPasswordResult(account, tempPassword);
                             _loadAccounts();
                           } catch (e) {
-                            setDialogState(() => isSubmitting = false);
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if (dialogCtx.mounted) {
+                              setDialogState(() => isSubmitting = false);
+                            }
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
                                 content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
                                 backgroundColor: AppTheme.alertCrimson,
@@ -488,6 +495,7 @@ Phone: ${account.phone ?? 'N/A'}
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.alertCrimson,
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(120, 42),
                   ),
                   child: isSubmitting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -510,29 +518,33 @@ Phone: ${account.phone ?? 'N/A'}
           children: const [
             Icon(Icons.check_circle, color: AppTheme.cropGreen, size: 24),
             SizedBox(width: 8),
-            Text('Temporary Password Generated', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('A temporary password has been assigned to ${account.fullName}. The user is required to set a permanent password upon first login.'),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.warmOffWhite,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.sageBorder),
-              ),
-              child: SelectableText(
-                tempPassword,
-                style: const TextStyle(fontSize: 16, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.alertCrimson),
-              ),
+            Expanded(
+              child: Text('Temporary Password Generated', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
             ),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Temporary password set for ${account.fullName}. They must change it on first login.'),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.warmOffWhite,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.sageBorder),
+                ),
+                child: SelectableText(
+                  tempPassword,
+                  style: const TextStyle(fontSize: 16, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.alertCrimson),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -549,6 +561,7 @@ Phone: ${account.phone ?? 'N/A'}
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.botanicalPrimary,
               foregroundColor: Colors.white,
+              minimumSize: const Size(120, 42),
             ),
           ),
         ],
@@ -660,9 +673,11 @@ Note: You will be prompted to change this temporary password on initial login.
                             );
                             _loadAccounts();
                           } catch (e) {
-                            setDialogState(() {
-                              isDeleting = false;
-                            });
+                            if (dialogCtx.mounted) {
+                              setDialogState(() {
+                                isDeleting = false;
+                              });
+                            }
                             if (!mounted) return;
                             ScaffoldMessenger.of(this.context).showSnackBar(
                               SnackBar(
@@ -673,6 +688,7 @@ Note: You will be prompted to change this temporary password on initial login.
                           }
                         },
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(110, 42),
                     backgroundColor: AppTheme.alertCrimson,
                     foregroundColor: Colors.white,
                   ),

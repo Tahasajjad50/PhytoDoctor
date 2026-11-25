@@ -19,13 +19,14 @@ class AuthService extends ChangeNotifier {
   // Dynamic base URL defaulting to AppConfig.apiBaseUrl (e.g. Render cloud URL in release)
   // with fallback candidate probes for local dev / emulator
   static String defaultBaseUrl = AppConfig.apiBaseUrl;
+  static UserModel? activeSessionUser;
   String baseUrl;
   final http.Client? client;
 
   UserModel? _currentUser;
   bool _isLoading = false;
 
-  UserModel? get currentUser => _currentUser;
+  UserModel? get currentUser => _currentUser ?? activeSessionUser;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _currentUser != null;
 
@@ -105,6 +106,7 @@ class AuthService extends ChangeNotifier {
         }
 
         _currentUser = user;
+        activeSessionUser = user;
         _isLoading = false;
         notifyListeners();
         return user;
@@ -201,6 +203,7 @@ class AuthService extends ChangeNotifier {
 
   void logout() {
     _currentUser = null;
+    activeSessionUser = null;
     notifyListeners();
   }
 }

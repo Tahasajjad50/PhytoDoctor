@@ -175,14 +175,14 @@ async def test_permission_and_visit_scoping(client: AsyncClient, employee_token:
     )
     assert forbidden_auth.status_code == 403
 
-    # Non-existent visit ID -> 404
-    fake_visit_id = str(uuid.uuid4())
-    not_found_res = await client.post(
-        f"/api/v1/media/visits/{fake_visit_id}/photo-upload-authorization",
+    # Offline-first pre-visit photo upload authorization -> 200 OK
+    pre_visit_id = str(uuid.uuid4())
+    pre_visit_res = await client.post(
+        f"/api/v1/media/visits/{pre_visit_id}/photo-upload-authorization",
         headers={"Authorization": f"Bearer {employee_token}"},
-        json={"visit_id": fake_visit_id},
+        json={"visit_id": pre_visit_id},
     )
-    assert not_found_res.status_code == 404
+    assert pre_visit_res.status_code == 200
 
 @pytest.mark.asyncio
 async def test_invalid_file_types_and_size_rejection(

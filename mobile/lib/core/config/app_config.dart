@@ -2,8 +2,8 @@ enum Environment { dev, staging, prod }
 
 class AppConfig {
   static const String appName = 'Phyto Doctor';
-  static const String appVersion = '1.0.7';
-  static const int buildNumber = 10;
+  static const String appVersion = '1.0.8';
+  static const int buildNumber = 11;
   static const String cloudinaryCloudName = 'hv4hfaee';
   static const String cloudinaryApiKey = '853659988188956';
 

@@ -181,21 +181,28 @@ class _EmployeeTargetDetailScreenState extends State<EmployeeTargetDetailScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: const [
-                            Icon(Icons.track_changes, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              "Today's Visit Quota Progress",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
+                        Expanded(
+                          child: Row(
+                            children: const [
+                              Icon(Icons.track_changes, color: Colors.white, size: 20),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  "Today's Visit Quota",
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
@@ -250,16 +257,21 @@ class _EmployeeTargetDetailScreenState extends State<EmployeeTargetDetailScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          _remaining == 0
-                              ? '🎯 Daily Quota Achieved!'
-                              : '$_remaining Visits Remaining to Complete Quota',
-                          style: TextStyle(
-                            color: _remaining == 0 ? Colors.white : const Color(0xFFFFD54F),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            _remaining == 0
+                                ? 'Daily Quota Achieved!'
+                                : '$_remaining Remaining',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: _remaining == 0 ? Colors.white : const Color(0xFFFFD54F),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           'Target: $_target/day',
                           style: TextStyle(
@@ -637,179 +649,200 @@ class _EmployeeTargetDetailScreenState extends State<EmployeeTargetDetailScreen>
       }
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceCard,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
-        border: Border.all(
-          color: isUpdatedByAdmin && status == 'VERIFIED'
-              ? AppTheme.cropGreen.withOpacity(0.5)
-              : (isUpdatedByAdmin && status == 'REJECTED'
-                  ? AppTheme.alertCrimson.withOpacity(0.5)
-                  : AppTheme.sageBorder),
-          width: isUpdatedByAdmin ? 1.5 : 1.0,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header Row
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => VisitDetailScreen(visit: visit)),
+          ).then((_) => _fetchLatestSummary());
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+            border: Border.all(
+              color: isUpdatedByAdmin && status == 'VERIFIED'
+                  ? AppTheme.cropGreen.withOpacity(0.5)
+                  : (isUpdatedByAdmin && status == 'REJECTED'
+                      ? AppTheme.alertCrimson.withOpacity(0.5)
+                      : AppTheme.sageBorder),
+              width: isUpdatedByAdmin ? 1.5 : 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Row
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        clientName,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.textMain,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: badgeBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(badgeIcon, size: 13, color: badgeText),
-                          const SizedBox(width: 4),
-                          Text(
-                            badgeLabel,
-                            style: TextStyle(
-                              fontSize: 10,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            clientName,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
                               fontWeight: FontWeight.w800,
-                              color: badgeText,
-                              letterSpacing: 0.3,
+                              color: AppTheme.textMain,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: badgeBg,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(badgeIcon, size: 13, color: badgeText),
+                              const SizedBox(width: 4),
+                              Text(
+                                badgeLabel,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: badgeText,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.access_time, size: 13, color: AppTheme.textMuted),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Time: $timeFormatted',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Icon(Icons.gps_fixed, size: 13, color: AppTheme.textMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          'GPS ±${accuracy.toStringAsFixed(1)}m',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                    if (clientPhone != null && clientPhone.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.phone, size: 13, color: AppTheme.textMuted),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              clientPhone,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time, size: 13, color: AppTheme.textMuted),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Time: $timeFormatted',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 12),
-                    const Icon(Icons.gps_fixed, size: 13, color: AppTheme.textMuted),
-                    const SizedBox(width: 4),
-                    Text(
-                      'GPS ±${accuracy.toStringAsFixed(1)}m',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-                if (clientPhone != null && clientPhone.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(Icons.phone, size: 13, color: AppTheme.textMuted),
-                      const SizedBox(width: 4),
-                      Text(
-                        clientPhone,
-                        style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                      ),
                     ],
-                  ),
-                ],
-                if (notes != null && notes.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.sageLight.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Agronomist Notes: $notes',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.botanicalDark, fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // Admin Review Banner (if updated/verified/rejected by admin)
-          if (isUpdatedByAdmin) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: status == 'VERIFIED'
-                    ? AppTheme.cropGreenLight.withOpacity(0.3)
-                    : (status == 'REJECTED' ? const Color(0xFFFFEBEE) : AppTheme.sageLight),
-                border: Border(
-                  top: BorderSide(
-                    color: status == 'VERIFIED'
-                        ? AppTheme.cropGreen.withOpacity(0.3)
-                        : (status == 'REJECTED' ? AppTheme.alertCrimson.withOpacity(0.3) : AppTheme.sageBorder),
-                  ),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        status == 'VERIFIED' ? Icons.verified : (status == 'REJECTED' ? Icons.error_outline : Icons.rate_review),
-                        size: 15,
-                        color: status == 'VERIFIED' ? AppTheme.cropGreen : (status == 'REJECTED' ? AppTheme.alertCrimson : AppTheme.botanicalPrimary),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        status == 'VERIFIED'
-                            ? 'Admin Audit: Verified & Approved'
-                            : (status == 'REJECTED' ? 'Admin Audit: Rejected / Needs Correction' : 'Admin Update Received'),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: status == 'VERIFIED' ? AppTheme.cropGreen : (status == 'REJECTED' ? AppTheme.alertCrimson : AppTheme.botanicalPrimary),
+                    if (notes != null && notes.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.sageLight.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Agronomist Notes: $notes',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.botanicalDark, fontStyle: FontStyle.italic),
                         ),
                       ),
                     ],
-                  ),
-                  if (reviewerName != null && reviewerName.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      'Reviewed by: $reviewerName',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMain),
-                    ),
                   ],
-                  if (reviewReason != null && reviewReason.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Supervisor Notes: "$reviewReason"',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: status == 'REJECTED' ? AppTheme.alertCrimson : AppTheme.textMain,
+                ),
+              ),
+
+              // Admin Review Banner (if updated/verified/rejected by admin)
+              if (isUpdatedByAdmin) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: status == 'VERIFIED'
+                        ? AppTheme.cropGreenLight.withOpacity(0.3)
+                        : (status == 'REJECTED' ? const Color(0xFFFFEBEE) : AppTheme.sageLight),
+                    border: Border(
+                      top: BorderSide(
+                        color: status == 'VERIFIED'
+                            ? AppTheme.cropGreen.withOpacity(0.3)
+                            : (status == 'REJECTED' ? AppTheme.alertCrimson.withOpacity(0.3) : AppTheme.sageBorder),
                       ),
                     ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            status == 'VERIFIED' ? Icons.verified : (status == 'REJECTED' ? Icons.error_outline : Icons.rate_review),
+                            size: 15,
+                            color: status == 'VERIFIED' ? AppTheme.cropGreen : (status == 'REJECTED' ? AppTheme.alertCrimson : AppTheme.botanicalPrimary),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              status == 'VERIFIED'
+                                  ? 'Admin Audit: Verified & Approved'
+                                  : (status == 'REJECTED' ? 'Admin Audit: Rejected / Needs Correction' : 'Admin Update Received'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: status == 'VERIFIED' ? AppTheme.cropGreen : (status == 'REJECTED' ? AppTheme.alertCrimson : AppTheme.botanicalPrimary),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (reviewerName != null && reviewerName.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Reviewed by: $reviewerName',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMain),
+                        ),
+                      ],
+                      if (reviewReason != null && reviewReason.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Supervisor Notes: "$reviewReason"',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: status == 'REJECTED' ? AppTheme.alertCrimson : AppTheme.textMain,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

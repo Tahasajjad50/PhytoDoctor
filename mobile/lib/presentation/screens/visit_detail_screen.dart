@@ -124,49 +124,55 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Row(
           children: const [
-            Icon(Icons.warning_amber_rounded, color: AppTheme.alertCrimson, size: 26),
+            Icon(Icons.warning_amber_rounded, color: AppTheme.alertCrimson, size: 24),
             SizedBox(width: 8),
-            Text(
-              'Reject Field Visit',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to reject the visit for "$clientName"?',
-              style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Rejection Reason (Optional):',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
-              decoration: InputDecoration(
-                hintText: 'e.g. Unclear photo proof, location mismatch, client unreachable...',
-                hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                contentPadding: const EdgeInsets.all(12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.sageBorder),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.cropGreen),
-                ),
+            Expanded(
+              child: Text(
+                'Reject Visit',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain),
               ),
             ),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Reject visit for "$clientName"?',
+                style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Reason (Optional):',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textMuted),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                style: const TextStyle(fontSize: 13, color: AppTheme.textMain),
+                decoration: InputDecoration(
+                  hintText: 'Optional note...',
+                  hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.sageBorder),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppTheme.cropGreen),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -178,6 +184,7 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.alertCrimson,
               foregroundColor: Colors.white,
+              minimumSize: const Size(100, 42),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
             child: const Text('Reject Visit'),
@@ -208,9 +215,13 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
     );
     final recordedTime = _visit['device_capture_time']?.toString() ?? _visit['timestamp']?.toString() ?? 'Recorded Today';
     final photoId = _visit['photo_asset_id']?.toString() ?? _visit['photo_id']?.toString() ?? 'AUTHENTICATED_PHOTO';
-    final accuracy = _visit['gps_accuracy'] ?? _visit['accuracy'] ?? 10;
+    final rawAccuracy = _visit['gps_accuracy'] ?? _visit['accuracy'] ?? 10;
+    final accuracy = rawAccuracy is num
+        ? rawAccuracy.toStringAsFixed(1)
+        : (double.tryParse(rawAccuracy.toString())?.toStringAsFixed(1) ?? rawAccuracy.toString());
+    final isMockLoc = _visit['is_mock_location'] == true;
     final distanceToShop = _visit['distance_to_shop']?.toString() ?? 'Verified on site (±${accuracy}m)';
-    final officerName = _visit['employee_name']?.toString() ?? _visit['officer']?.toString() ?? 'Salman (Field Agronomist)';
+    final officerName = _visit['employee_name']?.toString() ?? _visit['officer']?.toString() ?? 'Field Officer';
 
     Color statusColor = isVerified
         ? AppTheme.cropGreen
@@ -244,15 +255,20 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          clientType,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.botanicalPrimary,
-                            letterSpacing: 0.8,
+                        Expanded(
+                          child: Text(
+                            clientType,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.botanicalPrimary,
+                              letterSpacing: 0.8,
+                            ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
@@ -480,7 +496,7 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
                                         ),
                                       ),
                                       Text(
-                                        'GPS ACCURACY: ±$accuracy',
+                                        'GPS: ±${accuracy}m',
                                         style: const TextStyle(color: Color(0xFF81C784), fontSize: 11, fontWeight: FontWeight.w700),
                                       ),
                                     ],
@@ -521,13 +537,19 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Distance to Client Address:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                        Text(
-                          distanceToShop,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isVerified ? AppTheme.cropGreen : AppTheme.alertCrimson,
+                        const Text('Proximity:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            distanceToShop,
+                            textAlign: TextAlign.end,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isVerified ? AppTheme.cropGreen : AppTheme.alertCrimson,
+                            ),
                           ),
                         ),
                       ],
@@ -535,36 +557,61 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
                     const Divider(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        Text('Hardware GNSS Check:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                        Text('Passed (Real Sensor)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.cropGreen)),
+                      children: [
+                        const Text('GNSS Sensor:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            isMockLoc ? 'Flagged (Mock Signal)' : 'Passed (Real Sensor)',
+                            textAlign: TextAlign.end,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isMockLoc ? AppTheme.alertCrimson : AppTheme.cropGreen,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const Divider(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Recorded Coordinates:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
-                        InkWell(
-                          onTap: () {
-                            final lat = (_visit['latitude'] as num?)?.toDouble() ?? 31.5204;
-                            final lng = (_visit['longitude'] as num?)?.toDouble() ?? 74.3587;
-                            _openGoogleMaps(context, lat, lng);
-                          },
-                          child: Row(
-                            children: [
-                              Text(
-                                '${((_visit['latitude'] as num?)?.toDouble() ?? 31.5204).toStringAsFixed(6)}° N, ${((_visit['longitude'] as num?)?.toDouble() ?? 74.3587).toStringAsFixed(6)}° E',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.botanicalPrimary,
-                                  decoration: TextDecoration.underline,
+                        const Text('Coordinates:', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: InkWell(
+                            onTap: () {
+                              final lat = (_visit['latitude'] as num?)?.toDouble();
+                              final lng = (_visit['longitude'] as num?)?.toDouble();
+                              if (lat != null && lng != null) {
+                                _openGoogleMaps(context, lat, lng);
+                              }
+                            },
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    (_visit['latitude'] != null && _visit['longitude'] != null)
+                                        ? '${(_visit['latitude'] as num).toDouble().toStringAsFixed(5)}° N, ${(_visit['longitude'] as num).toDouble().toStringAsFixed(5)}° E'
+                                        : 'Unavailable',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.botanicalPrimary,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.open_in_new, size: 14, color: AppTheme.botanicalPrimary),
-                            ],
+                                const SizedBox(width: 4),
+                                const Icon(Icons.open_in_new, size: 14, color: AppTheme.botanicalPrimary),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -572,12 +619,14 @@ class _VisitDetailScreenState extends State<VisitDetailScreen> {
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
                       onPressed: () {
-                        final lat = (_visit['latitude'] as num?)?.toDouble() ?? 31.5204;
-                        final lng = (_visit['longitude'] as num?)?.toDouble() ?? 74.3587;
-                        _openGoogleMaps(context, lat, lng);
+                        final lat = (_visit['latitude'] as num?)?.toDouble();
+                        final lng = (_visit['longitude'] as num?)?.toDouble();
+                        if (lat != null && lng != null) {
+                          _openGoogleMaps(context, lat, lng);
+                        }
                       },
                       icon: const Icon(Icons.map, size: 16),
-                      label: const Text('Check Location now on Google Maps'),
+                      label: const Text('Open in Google Maps'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.botanicalPrimary,
                         foregroundColor: Colors.white,
