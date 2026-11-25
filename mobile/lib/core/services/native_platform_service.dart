@@ -71,6 +71,26 @@ class NativePlatformService {
     }
   }
 
+  /// Invokes the native Android/OS share sheet for files (Excel reports, PDFs, etc.)
+  static Future<bool> shareFile({
+    required String filePath,
+    String mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    String? subject,
+    String title = 'Share Audit Report',
+  }) async {
+    try {
+      final res = await _channel.invokeMethod<bool>('shareFile', {
+        'filePath': filePath,
+        'mimeType': mimeType,
+        'subject': subject,
+        'title': title,
+      });
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Displays an Android system notification bar notification
   static Future<bool> showNotification({
     required String title,

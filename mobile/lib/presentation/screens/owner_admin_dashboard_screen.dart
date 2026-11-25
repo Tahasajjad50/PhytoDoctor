@@ -10,6 +10,7 @@ import '../../core/config/app_config.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/native_platform_service.dart';
 import '../../core/services/share_service.dart';
 import '../../core/storage/secure_storage_service.dart';
 import '../../core/theme/app_theme.dart';
@@ -745,6 +746,26 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                         onPressed: () => Navigator.pop(doneCtx),
                         child: const Text('Close'),
                       ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final shared = await NativePlatformService.shareFile(
+                            filePath: savedPath,
+                            subject: 'PhytoDoctor Audit Report - $label',
+                            title: 'Share Excel Report',
+                          );
+                          if (!shared && mounted) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(content: Text('Report saved at: $savedPath')),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.share, size: 16),
+                        label: const Text('Share'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.botanicalPrimary,
+                          side: const BorderSide(color: AppTheme.botanicalPrimary),
+                        ),
+                      ),
                       ElevatedButton.icon(
                         onPressed: () async {
                           Navigator.pop(doneCtx);
@@ -760,7 +781,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                           }
                         },
                         icon: const Icon(Icons.open_in_new, size: 16),
-                        label: const Text('Open Excel'),
+                        label: const Text('Open'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.botanicalPrimary,
                           foregroundColor: Colors.white,

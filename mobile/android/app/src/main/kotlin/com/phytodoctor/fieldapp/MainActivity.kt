@@ -81,6 +81,44 @@ class MainActivity: FlutterActivity() {
                         result.error("SHARE_ERROR", e.message, null)
                     }
                 }
+                "shareFile" -> {
+                    val filePath = call.argument<String>("filePath")
+                    val mimeType = call.argument<String>("mimeType") ?: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    val subject = call.argument<String>("subject")
+                    val title = call.argument<String>("title") ?: "Share Audit Report"
+
+                    try {
+                        if (filePath.isNullOrEmpty()) {
+                            result.error("SHARE_ERROR", "Missing filePath", null)
+                            return@MethodCallHandler
+                        }
+                        val sourceFile = File(filePath)
+                        if (!sourceFile.exists()) {
+                            result.error("SHARE_ERROR", "File not found: $filePath", null)
+                            return@MethodCallHandler
+                        }
+                        // Copy to cacheDir to guarantee FileProvider URI compatibility across all Android versions
+                        val shareCacheFile = File(cacheDir, sourceFile.name)
+                        sourceFile.copyTo(shareCacheFile, overwrite = true)
+
+                        val uri = FileProvider.getUriForFile(
+                            this,
+                            "${applicationContext.packageName}.fileprovider",
+                            shareCacheFile
+                        )
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = mimeType
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            if (subject != null) putExtra(Intent.EXTRA_SUBJECT, subject)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        val chooserIntent = Intent.createChooser(sendIntent, title)
+                        startActivity(chooserIntent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SHARE_ERROR", e.message, null)
+                    }
+                }
                 "requestPermissions" -> {
                     val permissionsList = mutableListOf(
                         Manifest.permission.CAMERA,
