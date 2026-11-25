@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/app_update_service.dart';
@@ -586,13 +588,9 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
 
               _AdminTile(
                 icon: Icons.file_download,
-                title: 'Export Audit Reports (Excel / CSV)',
-                subtitle: 'Download verified visit records and GPS audit trails for accounting',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Exporting visit audit report to CSV...')),
-                  );
-                },
+                title: 'Export Audit Reports (Excel)',
+                subtitle: 'Download Excel workbook of visits, daily attendance, mark-in/out & GPS coordinates',
+                onTap: () => _showExportAuditReportDialog(context),
               ),
 
               const SizedBox(height: 24),
@@ -603,6 +601,327 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
     );
   }
 
+
+  void _showExportAuditReportDialog(BuildContext context) {
+    final searchCtrl = TextEditingController();
+    List<Map<String, dynamic>> staffList = [];
+    bool isLoading = true;
+    bool isExporting = false;
+    String? errorMsg;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            if (isLoading && staffList.isEmpty && errorMsg == null) {
+              Future.microtask(() async {
+                try {
+                  final token = widget.user.accessToken;
+                  final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/users/created-accounts');
+                  final res = await http.get(
+                    url,
+                    headers: {
+                      'Accept': 'application/json',
+                      if (token != null) 'Authorization': 'Bearer $token',
+                    },
+                  ).timeout(const Duration(seconds: 10));
+
+                  if (res.statusCode == 200) {
+                    final List<dynamic> data = jsonDecode(res.body);
+                    if (ctx.mounted) {
+                      setDialogState(() {
+                        staffList = data.cast<Map<String, dynamic>>();
+                        isLoading = false;
+                      });
+                    }
+                  } else {
+                    if (ctx.mounted) {
+                      setDialogState(() {
+                        errorMsg = 'Could not load staff list (HTTP ${res.statusCode})';
+                        isLoading = false;
+                      });
+                    }
+                  }
+                } catch (e) {
+                  if (ctx.mounted) {
+                    setDialogState(() {
+                      errorMsg = 'Network error: $e';
+                      isLoading = false;
+                    });
+                  }
+                }
+              });
+            }
+
+            final query = searchCtrl.text.trim().toLowerCase();
+            final filteredStaff = staffList.where((u) {
+              if (query.isEmpty) return true;
+              final name = (u['full_name']?.toString() ?? '').toLowerCase();
+              final uname = (u['username']?.toString() ?? '').toLowerCase();
+              final email = (u['email']?.toString() ?? '').toLowerCase();
+              final role = (u['role']?.toString() ?? '').toLowerCase();
+              return name.contains(query) || uname.contains(query) || email.contains(query) || role.contains(query);
+            }).toList();
+
+            Future<void> triggerExport(String? employeeId, String label) async {
+              setDialogState(() => isExporting = true);
+              try {
+                final token = widget.user.accessToken;
+                final querySuffix = (employeeId != null && employeeId.isNotEmpty) ? '?employee_id=$employeeId' : '';
+                final exportUri = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/admin/export-audit-report$querySuffix');
+
+                final res = await http.get(
+                  exportUri,
+                  headers: {
+                    if (token != null) 'Authorization': 'Bearer $token',
+                  },
+                ).timeout(const Duration(seconds: 35));
+
+                if (res.statusCode != 200) {
+                  throw Exception('Server returned HTTP ${res.statusCode}');
+                }
+
+                final timestamp = DateTime.now().millisecondsSinceEpoch;
+                final safeLabel = label.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+                final fileName = 'PhytoDoctor_Audit_${safeLabel}_$timestamp.xlsx';
+
+                String savedPath;
+                try {
+                  final downloadDir = Directory('/storage/emulated/0/Download');
+                  if (await downloadDir.exists()) {
+                    final file = File('${downloadDir.path}/$fileName');
+                    await file.writeAsBytes(res.bodyBytes);
+                    savedPath = file.path;
+                  } else {
+                    final extDir = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+                    final file = File('${extDir.path}/$fileName');
+                    await file.writeAsBytes(res.bodyBytes);
+                    savedPath = file.path;
+                  }
+                } catch (_) {
+                  final docDir = await getApplicationDocumentsDirectory();
+                  final file = File('${docDir.path}/$fileName');
+                  await file.writeAsBytes(res.bodyBytes);
+                  savedPath = file.path;
+                }
+
+                if (!mounted) return;
+                Navigator.pop(dialogCtx);
+
+                showDialog(
+                  context: this.context,
+                  builder: (doneCtx) => AlertDialog(
+                    title: Row(
+                      children: const [
+                        Icon(Icons.check_circle, color: AppTheme.cropGreen),
+                        SizedBox(width: 8),
+                        Expanded(child: Text('Excel Report Ready', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+                      ],
+                    ),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Exported "$label" Excel workbook (.xlsx) containing Visit Records, Daily Attendance, Mark-In/Out times, and GPS coordinates.', style: const TextStyle(fontSize: 13)),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warmOffWhite,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppTheme.sageBorder),
+                          ),
+                          child: Text(
+                            'Saved to:\n$savedPath',
+                            style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(doneCtx),
+                        child: const Text('Close'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(doneCtx);
+                          final fileUri = Uri.file(savedPath);
+                          try {
+                            await launchUrl(fileUri, mode: LaunchMode.externalApplication);
+                          } catch (_) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                SnackBar(content: Text('Report saved at: $savedPath')),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        label: const Text('Open Excel'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.botanicalPrimary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              } catch (e) {
+                if (ctx.mounted) {
+                  setDialogState(() => isExporting = false);
+                }
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(
+                      content: Text('Export failed: $e'),
+                      backgroundColor: AppTheme.alertCrimson,
+                    ),
+                  );
+                }
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              title: Row(
+                children: const [
+                  Icon(Icons.table_chart, color: AppTheme.cropGreen, size: 22),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Export Audit Report (.xlsx)',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 400,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Search bar for CEO/Admin to find specific employee
+                    TextField(
+                      controller: searchCtrl,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Search employee by name or username...',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        isDense: true,
+                        filled: true,
+                        fillColor: AppTheme.warmOffWhite,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: AppTheme.sageBorder),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Full Company Report Card
+                    InkWell(
+                      onTap: isExporting ? null : () => triggerExport(null, 'All_Staff'),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cropGreenLight,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.cropGreen.withOpacity(0.5)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.groups, color: AppTheme.cropGreen),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    'All Employees (Full Report)',
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppTheme.cropGreen),
+                                  ),
+                                  Text(
+                                    'Visits, Daily Attendance, Mark-In/Out & GPS',
+                                    style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.download, color: AppTheme.cropGreen, size: 20),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'OR SELECT SPECIFIC EMPLOYEE',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.textMuted, letterSpacing: 0.6),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: isExporting
+                          ? const Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircularProgressIndicator(color: AppTheme.cropGreen),
+                                  SizedBox(height: 10),
+                                  Text('Generating Excel workbook...', style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+                                ],
+                              ),
+                            )
+                          : isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : errorMsg != null
+                                  ? Center(child: Text(errorMsg!, style: const TextStyle(color: AppTheme.alertCrimson, fontSize: 12)))
+                                  : filteredStaff.isEmpty
+                                      ? const Center(child: Text('No matching staff found.', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)))
+                                      : ListView.separated(
+                                          itemCount: filteredStaff.length,
+                                          separatorBuilder: (_, __) => const Divider(height: 1),
+                                          itemBuilder: (_, idx) {
+                                            final emp = filteredStaff[idx];
+                                            final fullName = emp['full_name']?.toString() ?? 'Employee';
+                                            final username = emp['username']?.toString() ?? '';
+                                            final role = emp['role']?.toString() ?? 'EMPLOYEE';
+                                            final empId = emp['id']?.toString() ?? '';
+                                            return ListTile(
+                                              dense: true,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                                              leading: CircleAvatar(
+                                                radius: 16,
+                                                backgroundColor: AppTheme.botanicalPrimary.withOpacity(0.15),
+                                                child: Text(
+                                                  fullName.isNotEmpty ? fullName[0].toUpperCase() : 'E',
+                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.botanicalPrimary),
+                                                ),
+                                              ),
+                                              title: Text(fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                                              subtitle: Text('@$username • $role', style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                                              trailing: const Icon(Icons.file_download, color: AppTheme.botanicalPrimary, size: 18),
+                                              onTap: () => triggerExport(empId, username),
+                                            );
+                                          },
+                                        ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isExporting ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   void _showEmployeeProvisioningDialog(BuildContext context) {
     final formKey = GlobalKey<FormState>();

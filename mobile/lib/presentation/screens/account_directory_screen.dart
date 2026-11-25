@@ -575,6 +575,119 @@ Note: You will be prompted to change this temporary password on initial login.
     );
   }
 
+  void _showDeleteAccountDialog(CreatedAccountModel account) {
+    bool isDeleting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              title: Row(
+                children: const [
+                  Icon(Icons.delete_forever, color: AppTheme.alertCrimson, size: 24),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Delete Account',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.alertCrimson),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Are you sure you want to permanently delete "${account.fullName}" (@${account.username})?',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textMain),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF1F0),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.alertCrimson.withOpacity(0.35)),
+                    ),
+                    child: const Text(
+                      'This will permanently remove the account and revoke all active sessions. This action cannot be undone.',
+                      style: TextStyle(fontSize: 11, color: AppTheme.alertCrimson, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isDeleting ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isDeleting
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            isDeleting = true;
+                          });
+
+                          try {
+                            final token = widget.currentUser.accessToken;
+                            final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/users/${account.id}');
+                            final res = await http.delete(
+                              url,
+                              headers: {
+                                'Accept': 'application/json',
+                                if (token != null) 'Authorization': 'Bearer $token',
+                              },
+                            ).timeout(const Duration(seconds: 12));
+
+                            if (res.statusCode != 200) {
+                              final err = jsonDecode(res.body);
+                              throw Exception(err['detail'] ?? 'Failed to delete account (${res.statusCode})');
+                            }
+
+                            if (!mounted) return;
+                            Navigator.pop(dialogCtx);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text('Account "${account.username}" deleted successfully.'),
+                                backgroundColor: AppTheme.cropGreen,
+                              ),
+                            );
+                            _loadAccounts();
+                          } catch (e) {
+                            setDialogState(() {
+                              isDeleting = false;
+                            });
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
+                                backgroundColor: AppTheme.alertCrimson,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.alertCrimson,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: isDeleting
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isCEO = widget.currentUser.isOwner;
@@ -955,7 +1068,7 @@ Note: You will be prompted to change this temporary password on initial login.
 
                                         const SizedBox(height: 12),
 
-                                        // Action Buttons: Edit Info & Reset Password
+                                        // Action Buttons: Edit Info, Reset Password & Delete Account
                                         Row(
                                           children: [
                                             Expanded(
@@ -987,6 +1100,21 @@ Note: You will be prompted to change this temporary password on initial login.
                                                 ),
                                               ),
                                             ),
+                                            if (acc.id != widget.currentUser.id &&
+                                                acc.role.toUpperCase() != 'OWNER' &&
+                                                (isCEO || !acc.isManager)) ...[
+                                              const SizedBox(width: 8),
+                                              IconButton(
+                                                onPressed: () => _showDeleteAccountDialog(acc),
+                                                icon: const Icon(Icons.delete_outline, color: AppTheme.alertCrimson, size: 20),
+                                                tooltip: 'Delete Account',
+                                                style: IconButton.styleFrom(
+                                                  backgroundColor: const Color(0xFFFFF1F0),
+                                                  side: BorderSide(color: AppTheme.alertCrimson.withOpacity(0.4)),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ],

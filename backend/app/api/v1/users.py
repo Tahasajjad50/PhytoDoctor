@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import secrets
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin, require_owner
@@ -663,6 +663,73 @@ async def reveal_user_credential(
         login_password=decrypted_pwd,
         revealed_at=now_utc,
         revealed_by=current_user.username,
+    )
+
+
+@router.delete("/{user_id}", response_model=MessageResponse)
+async def delete_user(
+    user_id: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Deletes a user or admin (manager) account.
+    Authorization:
+      - OWNER (CEO) can delete MANAGER (Admin) and EMPLOYEE accounts.
+      - MANAGER (Admin) can delete EMPLOYEE accounts.
+      - Self-deletion and OWNER deletion are strictly prohibited.
+    """
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account.",
+        )
+
+    res = await db.execute(select(User).where(User.id == user_id))
+    target_user = res.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account not found.",
+        )
+
+    if target_user.role == UserRole.OWNER.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CEO / Owner account cannot be deleted.",
+        )
+
+    if current_user.role != UserRole.OWNER.value and target_user.role == UserRole.MANAGER.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the CEO can delete Admin accounts.",
+        )
+
+    deleted_info = {
+        "deleted_user_id": target_user.id,
+        "deleted_username": target_user.username,
+        "deleted_role": target_user.role,
+        "deleted_email": target_user.email,
+        "deleted_by": current_user.username,
+    }
+
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == target_user.id))
+    await db.execute(update(User).where(User.manager_id == target_user.id).values(manager_id=None))
+    await db.delete(target_user)
+
+    await log_audit_event(
+        db=db,
+        action="USER_DELETED",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        affected_record_id=user_id,
+        affected_record_type="User",
+        metadata=deleted_info,
+    )
+    await db.commit()
+
+    return MessageResponse(
+        message=f"Account '{target_user.username}' ({target_user.role}) has been permanently deleted."
     )
 
 

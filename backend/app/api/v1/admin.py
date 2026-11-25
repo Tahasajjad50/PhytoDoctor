@@ -1,8 +1,9 @@
+import io
 import json
-from datetime import datetime, timezone
 from datetime import datetime, timezone, time
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
@@ -172,3 +173,194 @@ async def list_audit_logs(
         )
 
     return AuditLogsListResponse(items=items, total=total)
+
+
+@router.get("/export-audit-report")
+async def export_audit_report(
+    employee_id: Optional[str] = Query(None, description="Optional specific employee UUID. Omit for all employees."),
+    admin_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generates and streams a multi-sheet Excel (.xlsx) audit report containing:
+      1. Visit Records (client, GPS coordinates, notes, status, rejection reason, Cloudinary photo URL)
+      2. Daily Attendance (date, mark in/out time, working hours, first/last GPS coordinates)
+      3. Employee Summary
+    Authorized for CEO (OWNER) and Admin/Manager (scoped to team for non-OWNER).
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    # 1. Determine allowed user IDs based on role and optional employee_id filter
+    user_query = select(User)
+    if admin_user.role != UserRole.OWNER.value:
+        user_query = user_query.where(
+            (User.id == admin_user.id)
+            | (User.manager_id == admin_user.id)
+            | (User.created_by_id == admin_user.id)
+        )
+    if employee_id and employee_id.strip():
+        user_query = user_query.where(User.id == employee_id.strip())
+
+    users_res = await db.execute(user_query.order_by(User.full_name.asc()))
+    users_list = users_res.scalars().all()
+    if employee_id and not users_list:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Employee not found or outside your supervision scope.",
+        )
+
+    user_map = {u.id: u for u in users_list}
+    allowed_ids = list(user_map.keys())
+
+    # 2. Fetch Field Visits and Attendance
+    visits_list = []
+    attendance_list = []
+    if allowed_ids:
+        v_res = await db.execute(
+            select(FieldVisit)
+            .where(FieldVisit.employee_id.in_(allowed_ids))
+            .order_by(FieldVisit.device_capture_time.desc())
+        )
+        visits_list = v_res.scalars().all()
+
+        a_res = await db.execute(
+            select(Attendance)
+            .where(Attendance.user_id.in_(allowed_ids))
+            .order_by(Attendance.date.desc(), Attendance.clock_in_time.desc())
+        )
+        attendance_list = a_res.scalars().all()
+
+    # Index visits by (employee_id, date) for attendance GPS correlation
+    visits_by_emp_day = {}
+    for v in visits_list:
+        v_date = v.device_capture_time.date() if v.device_capture_time else None
+        if v_date:
+            visits_by_emp_day.setdefault((v.employee_id, v_date), []).append(v)
+
+    # 3. Build Excel Workbook
+    wb = openpyxl.Workbook()
+    header_fill = PatternFill(start_color="1B5E20", end_color="1B5E20", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+
+    def style_header(ws, headers):
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.freeze_panes = "A2"
+
+    def auto_fit(ws):
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                val = str(cell.value or "")
+                if len(val) > max_len:
+                    max_len = len(val)
+            ws.column_dimensions[col_letter].width = min(max(max_len + 4, 14), 52)
+
+    # --- Sheet 1: Visit Records ---
+    ws_visits = wb.active
+    ws_visits.title = "Visit Records"
+    style_header(ws_visits, [
+        "Visit ID", "Employee Name", "Username", "Client Name", "Client Phone",
+        "Capture Time (UTC)", "Latitude", "Longitude", "GPS Coordinates",
+        "GPS Accuracy (m)", "Mock Location", "Verification Status",
+        "Rejection / Review Reason", "Field Notes", "Photo URL (Cloudinary)"
+    ])
+    for v in visits_list:
+        emp = user_map.get(v.employee_id)
+        cap_str = v.device_capture_time.strftime("%Y-%m-%d %H:%M:%S") if v.device_capture_time else ""
+        ws_visits.append([
+            v.id,
+            emp.full_name if emp else "Unknown",
+            emp.username if emp else "",
+            v.client_name,
+            v.client_phone or "",
+            cap_str,
+            round(v.latitude, 6),
+            round(v.longitude, 6),
+            f"{v.latitude:.6f}, {v.longitude:.6f}",
+            round(v.gps_accuracy, 2),
+            "Yes" if v.is_mock_location else "No",
+            v.status,
+            v.review_reason or "",
+            v.notes or "",
+            v.photo_url or "",
+        ])
+    auto_fit(ws_visits)
+
+    # --- Sheet 2: Daily Attendance ---
+    ws_att = wb.create_sheet(title="Daily Attendance")
+    style_header(ws_att, [
+        "Date", "Employee Name", "Username", "Mark In Time (UTC)",
+        "Mark Out Time (UTC)", "Working Hours", "Status",
+        "Day Visits Count", "First Visit GPS Coordinates", "Last Visit GPS Coordinates"
+    ])
+    for a in attendance_list:
+        emp = user_map.get(a.user_id)
+        mark_in_str = a.clock_in_time.strftime("%Y-%m-%d %H:%M:%S") if a.clock_in_time else ""
+        mark_out_str = a.clock_out_time.strftime("%Y-%m-%d %H:%M:%S") if a.clock_out_time else "Still Clocked In"
+        hours_str = "Active"
+        if a.clock_in_time and a.clock_out_time:
+            diff_hrs = (a.clock_out_time - a.clock_in_time).total_seconds() / 3600.0
+            hours_str = f"{diff_hrs:.2f} hrs"
+
+        day_visits = visits_by_emp_day.get((a.user_id, a.date), [])
+        day_visits_sorted = sorted(day_visits, key=lambda x: x.device_capture_time)
+        first_gps = f"{day_visits_sorted[0].latitude:.6f}, {day_visits_sorted[0].longitude:.6f}" if day_visits_sorted else "N/A"
+        last_gps = f"{day_visits_sorted[-1].latitude:.6f}, {day_visits_sorted[-1].longitude:.6f}" if day_visits_sorted else "N/A"
+
+        ws_att.append([
+            a.date.strftime("%Y-%m-%d") if a.date else "",
+            emp.full_name if emp else "Unknown",
+            emp.username if emp else "",
+            mark_in_str,
+            mark_out_str,
+            hours_str,
+            "Active" if a.is_active else "Completed",
+            len(day_visits),
+            first_gps,
+            last_gps,
+        ])
+    auto_fit(ws_att)
+
+    # --- Sheet 3: Employee Summary ---
+    ws_summary = wb.create_sheet(title="Employee Summary")
+    style_header(ws_summary, [
+        "Employee Name", "Username", "Role", "Designation",
+        "Attendance Days", "Total Visits", "Verified Visits", "Pending Visits", "Rejected Visits"
+    ])
+    for u in users_list:
+        u_visits = [v for v in visits_list if v.employee_id == u.id]
+        u_att = [a for a in attendance_list if a.user_id == u.id]
+        ws_summary.append([
+            u.full_name,
+            u.username,
+            u.role,
+            u.designation or "",
+            len(u_att),
+            len(u_visits),
+            sum(1 for v in u_visits if v.status == VisitStatus.VERIFIED.value),
+            sum(1 for v in u_visits if v.status == VisitStatus.PENDING.value),
+            sum(1 for v in u_visits if v.status == VisitStatus.REJECTED.value),
+        ])
+    auto_fit(ws_summary)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    scope_tag = users_list[0].username if (employee_id and len(users_list) == 1) else "all_staff"
+    date_tag = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+    filename = f"PhytoDoctor_Audit_{scope_tag}_{date_tag}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
