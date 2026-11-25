@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_admin
 from app.models.app_version import AppVersionConfig
 from app.models.user import User, UserRole
 
@@ -208,4 +208,52 @@ async def upload_apk(
         "latest_build_number": config.latest_build_number,
         "min_required_build_number": config.min_required_build_number,
     }
+
+
+@router.post("/push-update", response_model=AppVersionResponse)
+async def push_update_to_all_users(
+    body: UpdateVersionRequest,
+    admin_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    CEO / Admin endpoint: Pushes the latest app update configuration so all active
+    users receive an update notification and popup if their installed version is older.
+    """
+    res = await db.execute(select(AppVersionConfig).where(AppVersionConfig.id == 1))
+    config = res.scalars().first()
+    if not config:
+        config = AppVersionConfig(id=1)
+        db.add(config)
+
+    if body.latest_version is not None and body.latest_version.strip():
+        config.latest_version = body.latest_version.strip()
+    if body.latest_build_number is not None:
+        config.latest_build_number = body.latest_build_number
+        config.min_required_build_number = body.min_required_build_number or body.latest_build_number
+    elif body.min_required_build_number is not None:
+        config.min_required_build_number = body.min_required_build_number
+    config.force_update = True if body.force_update is None else body.force_update
+    config.title = (body.title.strip() if body.title and body.title.strip() else "Update Available")
+    config.message = (body.message.strip() if body.message and body.message.strip() else f"Version {config.latest_version} is available. Please update.")
+    if body.release_notes is not None:
+        config.release_notes = body.release_notes.strip()
+    if body.download_url is not None and body.download_url.strip():
+        config.download_url = body.download_url.strip()
+
+    config.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(config)
+
+    return AppVersionResponse(
+        latest_version=config.latest_version,
+        latest_build_number=config.latest_build_number,
+        min_required_build_number=config.min_required_build_number,
+        force_update=config.force_update,
+        title=config.title,
+        message=config.message,
+        release_notes=config.release_notes,
+        download_url=config.download_url,
+        updated_at=config.updated_at,
+    )
 

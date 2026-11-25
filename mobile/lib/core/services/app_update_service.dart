@@ -8,8 +8,11 @@ import '../config/app_config.dart';
 import '../models/app_version_model.dart';
 import '../theme/app_theme.dart';
 import 'auth_service.dart';
+import 'native_platform_service.dart';
 
 class AppUpdateService {
+  static bool _isDialogOpen = false;
+  static bool _notifiedUpdate = false;
   final http.Client _client;
   final String _baseUrl;
 
@@ -38,6 +41,7 @@ class AppUpdateService {
   static bool isUpdateRequired(AppVersionModel info) {
     if (!info.forceUpdate) return false;
     if (AppConfig.buildNumber < info.minRequiredBuildNumber) return true;
+    if (AppConfig.buildNumber < info.latestBuildNumber) return true;
     if (_isVersionLower(AppConfig.appVersion, info.latestVersion)) return true;
     return false;
   }
@@ -56,15 +60,25 @@ class AppUpdateService {
     return false;
   }
 
-  /// Checks version and immediately presents a blocking, un-dismissible popup if update is required.
-  /// Returns `true` if update is required and dialog is displayed.
+  /// Checks version and presents an update popup if the installed version is older.
   static Future<bool> checkAndPromptUpdate(BuildContext context) async {
+    if (_isDialogOpen) return true;
     final service = AppUpdateService();
     final info = await service.checkVersion();
 
     if (info != null && isUpdateRequired(info)) {
+      if (!_notifiedUpdate) {
+        _notifiedUpdate = true;
+        NativePlatformService.showChatNotification(
+          sender: 'PhytoDoctor Update',
+          message: 'New version v${info.latestVersion} available. Tap to update.',
+          conversationId: 'app_update',
+        );
+      }
       if (!context.mounted) return true;
-      await showDialog(
+      _isDialogOpen = true;
+      try {
+        await showDialog(
         context: context,
         barrierDismissible: false,
         builder: (dialogCtx) {
@@ -106,7 +120,7 @@ class AppUpdateService {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Your installed app (v${AppConfig.appVersion}, build ${AppConfig.buildNumber}) is out of date. To maintain database security and field sync, update to v${info.latestVersion} to proceed.',
+                    'Installed: v${AppConfig.appVersion} (B${AppConfig.buildNumber})\nLatest: v${info.latestVersion} (B${info.latestBuildNumber})',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 13,
@@ -197,22 +211,15 @@ class AppUpdateService {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Tap "Update Now" to download the latest APK in your browser. Tap "Close App" to exit.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.textMuted,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
                 ],
               ),
             ),
           );
         },
       );
+      } finally {
+        _isDialogOpen = false;
+      }
       return true;
     }
     return false;

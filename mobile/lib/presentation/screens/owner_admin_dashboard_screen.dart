@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/config/app_config.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
@@ -415,8 +416,8 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               _AdminTile(
                 icon: Icons.system_update_outlined,
                 title: 'In-App Update & Version Control',
-                subtitle: 'Enforce mandatory update popup, view current build & download link',
-                badgeText: 'v1.0.0 (B1)',
+                subtitle: 'Push latest update to all users',
+                badgeText: 'v${AppConfig.appVersion} (B${AppConfig.buildNumber})',
                 badgeColor: AppTheme.botanicalPrimary,
                 onTap: () => _showAppUpdateManagerDialog(context),
               ),
@@ -478,7 +479,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                 _AdminTile(
                   icon: Icons.badge_outlined,
                   title: 'Created Accounts Directory',
-                  subtitle: 'Full visibility: Who created accounts, when created & view/change credentials',
+                  subtitle: 'Manage staff & admin accounts',
                   badgeText: 'CEO DIRECTORY',
                   badgeColor: AppTheme.adminSlate,
                   onTap: () {
@@ -495,7 +496,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                 _AdminTile(
                   icon: Icons.badge_outlined,
                   title: 'Supervised Accounts Directory',
-                  subtitle: 'View & change credentials for employees created by you',
+                  subtitle: 'Manage employee accounts',
                   badgeText: 'ADMIN ACCESS',
                   badgeColor: AppTheme.adminSlate,
                   onTap: () {
@@ -514,7 +515,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               _AdminTile(
                 icon: Icons.person_add,
                 title: 'Add Customer',
-                subtitle: 'Register territory farm, dealer, or retail client & assign to field officer',
+                subtitle: 'Register new customer',
                 badgeText: 'ADMIN ONLY',
                 badgeColor: AppTheme.botanicalPrimary,
                 onTap: () => _showAddCustomerDialog(context),
@@ -525,7 +526,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               _AdminTile(
                 icon: Icons.verified,
                 title: 'Manager Verification Queue',
-                subtitle: 'Audit pending visits with photo and GPS geofence analysis',
+                subtitle: 'Review pending visits',
                 badgeText: '$_pendingCount Pending',
                 badgeColor: AppTheme.earthAmber,
                 onTap: () {
@@ -545,8 +546,8 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                 icon: Icons.supervised_user_circle_outlined,
                 title: 'Employee Supervision & Transfer',
                 subtitle: isOwner
-                    ? 'Assign employees to supervisors or forcefully transfer reporting hierarchy'
-                    : 'Manage supervised staff & transfer employee mentorship to other admins',
+                    ? 'Assign or transfer employees'
+                    : 'Manage supervised staff',
                 badgeText: isOwner ? 'CEO OVERRIDE' : 'ADMIN ACCESS',
                 badgeColor: isOwner ? AppTheme.earthAmber : AppTheme.adminSlate,
                 onTap: () {
@@ -564,7 +565,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               _AdminTile(
                 icon: Icons.manage_accounts,
                 title: isOwner ? 'Executive Profile & Settings' : 'Admin Profile & Settings',
-                subtitle: 'View credentials, operational authority, and database status',
+                subtitle: 'Account & settings',
                 onTap: () {
                   Navigator.push(
                     context,
@@ -580,7 +581,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               _AdminTile(
                 icon: Icons.flag,
                 title: 'Monthly Visit & Sales Quotas',
-                subtitle: 'Set daily visit targets (currently: $_activeDailyTarget visits/day) and monthly sales quotas',
+                subtitle: 'Daily target: $_activeDailyTarget visits/day',
                 onTap: () => _showTargetQuotasDialog(context),
               ),
 
@@ -589,7 +590,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
               _AdminTile(
                 icon: Icons.file_download,
                 title: 'Export Audit Reports (Excel)',
-                subtitle: 'Download Excel workbook of visits, daily attendance, mark-in/out & GPS coordinates',
+                subtitle: 'Visits, attendance & GPS coordinates (.xlsx)',
                 onTap: () => _showExportAuditReportDialog(context),
               ),
 
@@ -1082,12 +1083,6 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Authorized by CEO Mehmood Ayyaz. Explicitly assign whether this user is an Admin or Field Employee.',
-                        style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                      ),
-                      const SizedBox(height: 14),
-
                       // Role Selection (Mandatory - NOT set by default)
                       DropdownButtonFormField<String>(
                         value: selectedRole,
@@ -1425,11 +1420,6 @@ Password: $password
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Company targets are synchronized across all regional teams and field agronomists.',
-                    style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                  ),
-                  const SizedBox(height: 14),
                   TextFormField(
                     controller: dailyVisitCtrl,
                     keyboardType: TextInputType.number,
@@ -1552,12 +1542,6 @@ Password: $password
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Admin & CEO Authority: Add farm, dealer, or retail clients. Customers are automatically assigned to the nearest field agronomist in the designated territory.',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                    ),
-                    const SizedBox(height: 14),
-
                     TextFormField(
                       controller: nameCtrl,
                       decoration: const InputDecoration(
@@ -1723,59 +1707,142 @@ Password: $password
   }
 
   void _showAppUpdateManagerDialog(BuildContext context) {
+    final versionCtrl = TextEditingController(text: AppConfig.appVersion);
+    final buildCtrl = TextEditingController(text: AppConfig.buildNumber.toString());
+    final notesCtrl = TextEditingController();
+    bool isPushing = false;
+
     showDialog(
       context: context,
       builder: (dialogCtx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: const [
-              Icon(Icons.system_update_outlined, color: AppTheme.botanicalPrimary),
-              SizedBox(width: 8),
-              Text('In-App Update System', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Automatic In-App Updates ensure all 20 field staff and testers always use the latest features.',
-                style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.system_update_outlined, color: AppTheme.botanicalPrimary),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('In-App Update & Version Control', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.sageLight,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.sageBorder),
-                ),
+              content: SingleChildScrollView(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('Installed App Version: v1.0.0 (Build 1)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textMain)),
-                    SizedBox(height: 4),
-                    Text('Update Status: Active on Cloud', style: TextStyle(fontSize: 12, color: AppTheme.cropGreen, fontWeight: FontWeight.w600)),
-                    SizedBox(height: 4),
-                    Text('Enforcement: Pre-login blocking popup', style: TextStyle(fontSize: 12, color: AppTheme.adminSlate)),
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.sageLight,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.sageBorder),
+                      ),
+                      child: Text(
+                        'Current App: v${AppConfig.appVersion} (Build ${AppConfig.buildNumber})',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: versionCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Target Version',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: buildCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Build Number',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: notesCtrl,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Release Notes (Optional)',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'To push updates to all 20 users with a single click, run "Publish_New_Update.bat" on your computer.',
-                style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-              ),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.botanicalPrimary, foregroundColor: Colors.white),
-              child: const Text('OK'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: isPushing ? null : () => Navigator.pop(dialogCtx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: isPushing
+                      ? null
+                      : () async {
+                          final ver = versionCtrl.text.trim();
+                          final bld = int.tryParse(buildCtrl.text.trim()) ?? AppConfig.buildNumber;
+                          if (ver.isEmpty) return;
+
+                          setDialogState(() => isPushing = true);
+                          try {
+                            final token = widget.user.accessToken;
+                            final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/system/push-update');
+                            final res = await http.post(
+                              url,
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                if (token != null) 'Authorization': 'Bearer $token',
+                              },
+                              body: jsonEncode({
+                                'latest_version': ver,
+                                'latest_build_number': bld,
+                                'min_required_build_number': bld,
+                                'force_update': true,
+                                if (notesCtrl.text.trim().isNotEmpty) 'release_notes': notesCtrl.text.trim(),
+                              }),
+                            ).timeout(const Duration(seconds: 15));
+
+                            if (res.statusCode != 200) {
+                              throw Exception('HTTP ${res.statusCode}');
+                            }
+
+                            if (!mounted) return;
+                            Navigator.pop(dialogCtx);
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(
+                                content: Text('Update v$ver (Build $bld) pushed to all users.'),
+                                backgroundColor: AppTheme.cropGreen,
+                              ),
+                            );
+                          } catch (e) {
+                            if (ctx.mounted) setDialogState(() => isPushing = false);
+                            if (mounted) {
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to push update: $e'),
+                                  backgroundColor: AppTheme.alertCrimson,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  icon: isPushing
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.campaign_outlined, size: 18),
+                  label: const Text('Push Latest Update'),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.botanicalPrimary, foregroundColor: Colors.white),
+                ),
+              ],
+            );
+          },
         );
       },
     );

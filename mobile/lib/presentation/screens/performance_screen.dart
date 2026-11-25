@@ -308,7 +308,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Business Rule: Only supervisor-verified on-site visits count toward quota completion.',
+                'Only verified visits count toward quotas.',
                 style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
               ),
             ],

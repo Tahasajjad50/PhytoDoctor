@@ -1020,12 +1020,6 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Admin Authority: Register customer. Customer will appear in the territory of the nearest assigned field agronomist.',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                    ),
-                    const SizedBox(height: 14),
-
                     TextFormField(
                       controller: nameCtrl,
                       decoration: const InputDecoration(

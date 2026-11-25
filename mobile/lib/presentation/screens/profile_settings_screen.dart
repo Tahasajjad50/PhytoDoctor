@@ -20,7 +20,7 @@ class ProfileSettingsScreen extends StatelessWidget {
         ),
         title: const Text('Confirm Sign Out', style: TextStyle(color: AppTheme.textMain)),
         content: const Text(
-          'Any queued visits in local storage will remain saved and will sync next time you log in.',
+          'Sign out of your account?',
           style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
         ),
         actions: [

@@ -192,23 +192,23 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _policyBullet(
-                'Zero Background Tracking',
-                'Phyto Doctor never tracks your location in the background or when the app is closed. Location is only read at the moment you tap Record Visit.',
+                'On-Demand GPS',
+                'Location is read only when recording a visit.',
               ),
               const SizedBox(height: 10),
               _policyBullet(
-                'Live In-App Photos Only',
-                'To maintain genuine customer verification, photos must be captured live with the in-app camera shutter. Gallery image selection is permanently disabled.',
+                'Live Camera Only',
+                'Photos must be captured using the in-app camera.',
               ),
               const SizedBox(height: 10),
               _policyBullet(
-                'Configurable 50m GPS Threshold',
-                'Visits require high-precision satellite accuracy (±50m or better). If accuracy is low, you can step into an open area and tap Retry GPS.',
+                'GPS Accuracy (±50m)',
+                'Step into an open area and tap Retry GPS if accuracy is low.',
               ),
               const SizedBox(height: 10),
               _policyBullet(
-                'Fair Supervisor Review',
-                'System flags (such as weak satellite signals or upload delays) serve as audit indicators for supervisors and are never treated as proof of fraud.',
+                'Supervisor Review',
+                'System flags are audit indicators for review.',
               ),
             ],
           ),

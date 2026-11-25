@@ -143,10 +143,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     ),
                     Text(
                       isOwner
-                          ? 'CEO Executive Access: Search any employee or admin by name to start a direct message.'
+                          ? 'Search employee or admin'
                           : isManager
-                              ? 'Admin Access: You can only message employees assigned to you or the CEO.'
-                              : 'Employee Access: You can message your assigned admin or the CEO.',
+                              ? 'Message team or CEO'
+                              : 'Message admin or CEO',
                       style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                     ),
                     const SizedBox(height: 12),

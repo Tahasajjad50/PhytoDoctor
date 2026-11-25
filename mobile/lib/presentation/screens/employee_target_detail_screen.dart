@@ -578,8 +578,8 @@ class _EmployeeTargetDetailScreenState extends State<EmployeeTargetDetailScreen>
           const SizedBox(height: 6),
           Text(
             _selectedFilter == 'ADMIN_UPDATED'
-                ? 'Visits submitted today will appear here as soon as reviewed or updated by your branch manager or CEO.'
-                : 'You have not recorded any field visits today. Press "Record New Visit Now" below to begin.',
+                ? 'No admin-reviewed visits today.'
+                : 'No field visits logged today.',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
           ),

@@ -151,7 +151,7 @@ class _EmployeeLocationTrackingScreenState extends State<EmployeeLocationTrackin
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Track active employee devices and verify field shop locations via real-time satellite coordinates and geofences.',
+                      'Live employee device locations.',
                       style: TextStyle(
                         fontSize: 13,
                         color: AppTheme.textMuted,
@@ -198,7 +198,7 @@ class _EmployeeLocationTrackingScreenState extends State<EmployeeLocationTrackin
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'When authorized field staff clock in or log verified GPS customer visits from their mobile devices, their real-time satellite positions will appear here.',
+                        'Active employee locations will appear here.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 12,

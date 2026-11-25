@@ -736,8 +736,8 @@ Note: You will be prompted to change this temporary password on initial login.
                   Expanded(
                     child: Text(
                       isCEO
-                          ? 'CEO Executive Access: Full visibility of all accounts, which admin created them, creation dates, and credentials.'
-                          : 'Admin Console: Viewing & managing credentials for employees created by you.',
+                          ? 'All Staff & Admin Accounts'
+                          : 'Supervised Employee Accounts',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,

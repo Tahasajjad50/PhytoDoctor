@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
+import 'app_update_service.dart';
 import 'chat_service.dart';
 import 'notification_service.dart';
 
@@ -14,6 +15,8 @@ class ChatNotificationMonitor {
   Timer? _pollingTimer;
   final Set<String> _seenMessageKeys = {};
   bool _isChecking = false;
+  int _pollCounter = 0;
+  String? _notifiedUpdateVersion;
 
   void start(UserModel user) {
     _currentUser = user;
@@ -68,6 +71,23 @@ class ChatNotificationMonitor {
               id: room.id.hashCode.abs() % 100000,
             );
           }
+        }
+      }
+
+      // Periodically check for pushed app updates (~every 28s)
+      _pollCounter++;
+      if (_pollCounter % 4 == 1) {
+        final updateInfo = await AppUpdateService().checkVersion();
+        if (updateInfo != null &&
+            AppUpdateService.isUpdateRequired(updateInfo) &&
+            _notifiedUpdateVersion != '${updateInfo.latestVersion}_${updateInfo.latestBuildNumber}') {
+          _notifiedUpdateVersion = '${updateInfo.latestVersion}_${updateInfo.latestBuildNumber}';
+          NotificationService().showMessageNotification(
+            title: 'PhytoDoctor Update v${updateInfo.latestVersion}',
+            body: 'A new update is available. Please update the app.',
+            payload: 'app_update',
+            id: 999999,
+          );
         }
       }
     } catch (_) {
