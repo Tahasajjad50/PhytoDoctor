@@ -8,7 +8,7 @@ import '../config/app_config.dart';
 import '../models/app_version_model.dart';
 import '../theme/app_theme.dart';
 import 'auth_service.dart';
-import 'native_platform_service.dart';
+import 'notification_service.dart';
 
 class AppUpdateService {
   static bool _isDialogOpen = false;
@@ -69,10 +69,11 @@ class AppUpdateService {
     if (info != null && isUpdateRequired(info)) {
       if (!_notifiedUpdate) {
         _notifiedUpdate = true;
-        NativePlatformService.showChatNotification(
-          sender: 'PhytoDoctor Update',
-          message: 'New version v${info.latestVersion} available. Tap to update.',
-          conversationId: 'app_update',
+        NotificationService().showMessageNotification(
+          title: 'PhytoDoctor Update v${info.latestVersion}',
+          body: 'New version v${info.latestVersion} available. Tap to update.',
+          payload: 'app_update',
+          id: 999999,
         );
       }
       if (!context.mounted) return true;
