@@ -268,10 +268,14 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
       ),
     );
 
-    if (result == true) {
-      _loadDashboardData();
+    if (result == true && mounted) {
+      setState(() {
+        _pendingSyncCount = _syncManager.pendingCount;
+      });
       if (_syncManager.pendingCount > 0 && !_syncManager.isSyncing) {
-        _triggerManualSync();
+        await _triggerManualSync();
+      } else {
+        _loadDashboardData();
       }
     }
   }

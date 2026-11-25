@@ -5,7 +5,6 @@ import '../../core/services/location_service.dart';
 import '../../core/services/native_platform_service.dart';
 import '../../core/storage/local_visit_queue.dart';
 import '../../core/storage/photo_storage_service.dart';
-import '../../core/sync/offline_sync_manager.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/real_visit_repository.dart';
 import '../../data/repositories/visit_repository.dart';
@@ -57,6 +56,7 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
   // Permission State
   bool _cameraPermissionDenied = false;
   bool _locationPermissionDenied = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -273,8 +273,10 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
   }
 
   /// Submits the visit: validates mandatory fields, checks accuracy threshold,
-  /// displays confirmation review modal, saves to local queue, and attempts sync.
+  /// displays confirmation review modal, saves to local queue immediately, and triggers sync.
   void _submitVisit() async {
+    if (_isSubmitting) return;
+
     // 1. Mandatory Form Validation (Client name required)
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -425,76 +427,80 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
     );
 
     if (confirmed != true) return;
-
-    // 6. Generate UUID Idempotency Key before upload
-    final empTag = widget.user.id.replaceAll("-", "").padRight(8, '0').substring(0, 8);
-    final visitUuid = 'VISIT_${DateTime.now().millisecondsSinceEpoch}_$empTag';
-
-    // 7. Store Photo Reference in App-Private Storage (Persist captured camera file)
-    String privatePhotoPath = _capturedPhotoPath ?? PhotoStorageService().generatePrivatePhotoPath(visitUuid, _photoAssetId!);
-    if (_capturedPhotoPath != null && File(_capturedPhotoPath!).existsSync()) {
-      try {
-        privatePhotoPath = await PhotoStorageService().persistCapturedPhotoFile(
-          visitId: visitUuid,
-          photoAssetId: _photoAssetId!,
-          sourceFilePath: _capturedPhotoPath!,
-        );
-      } catch (persistErr) {
-        debugPrint('[RecordVisit] Persist photo file warning: $persistErr');
-        privatePhotoPath = _capturedPhotoPath!;
-      }
-    }
-
-    // 8. Build Visit Payload with UUID Idempotency Key
-    final visitPayload = <String, dynamic>{
-      'id': visitUuid,
-      'employee_id': widget.user.id,
-      'client_name': _clientName,
-      'client_phone': _clientPhone.isNotEmpty ? _clientPhone : null,
-      'client_type': _selectedClientType,
-      'visit_purpose': _visitPurpose,
-      'notes': _notes.trim(),
-      'latitude': _latitude,
-      'longitude': _longitude,
-      'gps_accuracy': _gpsAccuracy,
-      'is_mock_location': _isMockLocation,
-      'device_capture_time': deviceCaptureIso,
-      'local_photo_path': privatePhotoPath,
-      'photo_asset_id': _photoAssetId,
-      'photo_url': null,
-    };
-
-    // 9. Save locally to SQLite offline queue immediately (Guarantees zero data loss)
-    await _localQueue.enqueueVisit(visitPayload);
-
-    // 10. Attempt immediate direct sync with backend & Cloudinary if online
-    bool syncedToServer = false;
-    try {
-      final token = widget.user.accessToken ?? '';
-      if (token.isNotEmpty) {
-        final syncedCount = await OfflineSyncManager().syncNow(
-          repository: _repository,
-          token: token,
-          forceRetryAll: true,
-        );
-        syncedToServer = syncedCount > 0;
-      }
-    } catch (_) {
-      syncedToServer = false;
-    }
-
     if (!mounted) return;
+    setState(() => _isSubmitting = true);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(syncedToServer
-            ? 'Visit uploaded.'
-            : 'Saved offline. Will auto-sync.'),
-        backgroundColor: syncedToServer ? AppTheme.cropGreen : AppTheme.earthAmber,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-    Navigator.pop(context, true);
+    try {
+      // 6. Generate UUID Idempotency Key before queue/upload
+      final empTag = widget.user.id.replaceAll("-", "").padRight(8, '0').substring(0, 8);
+      final visitUuid = 'VISIT_${DateTime.now().millisecondsSinceEpoch}_$empTag';
+
+      // 7. Store Photo Reference in App-Private Storage (Persist captured camera file)
+      String privatePhotoPath = _capturedPhotoPath ?? PhotoStorageService().generatePrivatePhotoPath(visitUuid, _photoAssetId!);
+      if (_capturedPhotoPath != null && File(_capturedPhotoPath!).existsSync()) {
+        try {
+          privatePhotoPath = await PhotoStorageService().persistCapturedPhotoFile(
+            visitId: visitUuid,
+            photoAssetId: _photoAssetId!,
+            sourceFilePath: _capturedPhotoPath!,
+          );
+        } catch (persistErr) {
+          debugPrint('[RecordVisit] Persist photo file warning: $persistErr');
+          privatePhotoPath = _capturedPhotoPath!;
+        }
+      }
+
+      // 8. Build Visit Payload with UUID Idempotency Key
+      final visitPayload = <String, dynamic>{
+        'id': visitUuid,
+        'employee_id': widget.user.id,
+        'client_name': _clientName,
+        'client_phone': _clientPhone.isNotEmpty ? _clientPhone : null,
+        'client_type': _selectedClientType,
+        'visit_purpose': _visitPurpose,
+        'notes': _notes.trim(),
+        'latitude': _latitude,
+        'longitude': _longitude,
+        'gps_accuracy': _gpsAccuracy,
+        'is_mock_location': _isMockLocation,
+        'device_capture_time': deviceCaptureIso,
+        'local_photo_path': privatePhotoPath,
+        'photo_asset_id': _photoAssetId,
+        'photo_url': null,
+      };
+
+      // 9. Enqueue locally in SQLite immediately (instant queue, zero data loss)
+      await _localQueue.enqueueVisit(visitPayload);
+
+      // 10. Quick connectivity check so offline returns immediately while online starts upload right away
+      bool hasInternet = false;
+      try {
+        final lookup = await InternetAddress.lookup('api.cloudinary.com')
+            .timeout(const Duration(seconds: 2));
+        hasInternet = lookup.isNotEmpty && lookup.first.rawAddress.isNotEmpty;
+      } catch (_) {
+        hasInternet = false;
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            hasInternet
+                ? 'Added to queue. Uploading...'
+                : 'No internet connection. Saved in queue.',
+          ),
+          backgroundColor: hasInternet ? AppTheme.botanicalPrimary : AppTheme.earthAmber,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      Navigator.pop(context, true);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 
   Widget _reviewRow(String label, String value) {
@@ -984,16 +990,22 @@ class _RecordVisitScreenState extends State<RecordVisitScreen> {
                 // Submit Button
                 ElevatedButton(
                   key: const Key('submitVisitButton'),
-                  onPressed: _submitVisit,
+                  onPressed: _isSubmitting ? null : _submitVisit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.botanicalPrimary,
                     foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 50),
                   ),
-                  child: const Text(
-                    'SUBMIT VERIFIED FIELD VISIT',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5),
-                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'SUBMIT VERIFIED FIELD VISIT',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                        ),
                 ),
 
                 const SizedBox(height: 14),

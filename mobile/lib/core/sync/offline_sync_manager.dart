@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../data/repositories/visit_repository.dart';
 import '../models/visit_state.dart';
-import '../services/auth_service.dart';
 import '../storage/cloudinary_upload_service.dart';
 import '../storage/photo_storage_service.dart';
 import '../storage/sqlite_visit_database.dart';
@@ -120,6 +120,32 @@ class OfflineSyncManager extends ChangeNotifier {
 
       final total = pendingVisits.length;
 
+      // Fail fast when device is completely offline so queued visits don't stall on socket timeouts
+      if (!repository.isMock) {
+        bool hasNetwork = false;
+        try {
+          final lookup = await InternetAddress.lookup('api.cloudinary.com')
+              .timeout(const Duration(seconds: 2));
+          hasNetwork = lookup.isNotEmpty && lookup.first.rawAddress.isNotEmpty;
+        } catch (_) {
+          hasNetwork = false;
+        }
+        if (!hasNetwork) {
+          _lastError = 'No internet connection. Saved in queue and will upload when online.';
+          for (final pendingVisit in pendingVisits) {
+            await _db.updateSyncState(
+              pendingVisit.id,
+              VisitSyncState.syncFailed,
+              error: _lastError,
+            );
+          }
+          _lastSyncTime = DateTime.now();
+          _syncProgress = 0.0;
+          _currentStepMessage = _lastError!;
+          return 0;
+        }
+      }
+
       for (int i = 0; i < total; i++) {
         final visit = pendingVisits[i];
         _syncProgress = i / total;
@@ -149,7 +175,7 @@ class OfflineSyncManager extends ChangeNotifier {
 
         // 2. Safe Recovery from Interrupted Photo Upload & Avoid Duplicate Uploads
         String? confirmedPhotoUrl = visit.photoUploadUrl;
-        if (confirmedPhotoUrl == null) {
+        if (confirmedPhotoUrl == null || confirmedPhotoUrl.isEmpty) {
           _currentStepMessage = 'Verifying and uploading photo for ${visit.clientName}...';
           notifyListeners();
 
@@ -165,17 +191,35 @@ class OfflineSyncManager extends ChangeNotifier {
           }
 
           try {
-            // Upload photo evidence securely to Cloudinary via FastAPI daily-partitioned endpoints
+            // Upload photo evidence securely to Cloudinary
             final uploadResult = await CloudinaryUploadService().uploadPhotoEvidence(
               visitId: visit.id,
               localPhotoPath: visit.localPhotoPath,
               token: token,
             );
             confirmedPhotoUrl = uploadResult.photoUrl;
+            // Persist Cloudinary URL right away so a failed visit POST never re-uploads the image
+            await _db.updateSyncState(
+              visit.id,
+              VisitSyncState.syncing,
+              photoUrl: confirmedPhotoUrl,
+            );
           } catch (uploadError) {
-            debugPrint('[OfflineSyncManager] Cloudinary direct upload note: $uploadError. Using resilient staging path.');
-            final base = AuthService.defaultBaseUrl.isNotEmpty ? AuthService.defaultBaseUrl : 'https://phytodoctor-api.onrender.com';
-            confirmedPhotoUrl = '$base/api/v1/media/visits/${visit.id}/photo-file';
+            final errLower = uploadError.toString().toLowerCase();
+            final isNetErr = errLower.contains('socket') ||
+                errLower.contains('network') ||
+                errLower.contains('timed out') ||
+                errLower.contains('failed host lookup');
+            _lastError = isNetErr
+                ? 'Network unavailable. Visits preserved offline and will sync when internet returns.'
+                : 'Photo upload failed: ${uploadError.toString().replaceFirst('Exception: ', '')}';
+            await _db.updateSyncState(
+              visit.id,
+              VisitSyncState.syncFailed,
+              error: _lastError,
+            );
+            if (isNetErr) break;
+            continue;
           }
         }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -102,7 +103,7 @@ class CloudinaryUploadService {
         'Content-Type': 'application/json',
       },
       body: jsonEncode({'visit_id': visitId}),
-    );
+    ).timeout(const Duration(seconds: 12));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -188,6 +189,12 @@ class CloudinaryUploadService {
         token: token,
         rawBytes: rawBytes,
       );
+    } on SocketException catch (e) {
+      throw Exception('Network unavailable: $e');
+    } on TimeoutException catch (e) {
+      throw Exception('Network unavailable: Upload timed out ($e)');
+    } on http.ClientException catch (e) {
+      throw Exception('Network unavailable: $e');
     } catch (directErr) {
       debugPrint('[CloudinaryUploadService] Direct upload notice: $directErr. Falling back to backend Cloudinary relay.');
     }

@@ -102,12 +102,12 @@ class CloudinaryService:
 
         timestamp = int(time.time())
         sanitized_emp = employee_id.replace("-", "")[:8]
-        sanitized_visit = visit_id.replace("-", "")[:12]
-        unique_suffix = uuid.uuid4().hex[:8]
+        # Deterministic public_id per visit prevents duplicate Cloudinary uploads on retries
+        visit_hash = hashlib.sha1(visit_id.encode("utf-8")).hexdigest()[:16]
         
         # Structure folder strictly on daily basis: phytodoctor/visits/YYYY-MM-DD/{employee_id}
         folder = f"{settings.CLOUDINARY_FOLDER}/{date_str}/{sanitized_emp}"
-        public_id = f"visit_{sanitized_visit}_{unique_suffix}"
+        public_id = f"visit_{visit_hash}"
         
         cloud_name = settings.CLOUDINARY_CLOUD_NAME or "hv4hfaee"
         api_key = settings.CLOUDINARY_API_KEY or "853659988188956"
