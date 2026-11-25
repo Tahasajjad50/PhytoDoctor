@@ -282,7 +282,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                               border: Border.all(color: AppTheme.adminSlate.withOpacity(0.4)),
                             ),
                             child: Text(
-                              isOwner ? (_isMehmood ? 'OWNER & CEO' : 'OWNER') : 'MANAGER',
+                              isOwner ? 'OWNER & CEO' : 'ADMIN',
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,

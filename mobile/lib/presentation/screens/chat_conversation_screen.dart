@@ -4,6 +4,7 @@ import '../../core/models/chat_model.dart';
 import '../../core/models/user_model.dart';
 import '../../core/services/chat_notification_monitor.dart';
 import '../../core/services/chat_service.dart';
+import '../../core/services/notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import 'chat_list_screen.dart';
 
