@@ -498,9 +498,19 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                 const SizedBox(height: 10),
               ] else ...[
                 _AdminTile(
+                  icon: Icons.person_add_alt_1,
+                  title: 'Add Employee Account',
+                  subtitle: 'Create a new field employee account',
+                  badgeText: 'ADMIN ACCESS',
+                  badgeColor: AppTheme.botanicalPrimary,
+                  onTap: () => _showAddAdminDialog(context),
+                ),
+                const SizedBox(height: 10),
+
+                _AdminTile(
                   icon: Icons.badge_outlined,
                   title: 'Supervised Accounts Directory',
-                  subtitle: 'Manage employee accounts',
+                  subtitle: 'Manage accounts you created',
                   badgeText: 'ADMIN ACCESS',
                   badgeColor: AppTheme.adminSlate,
                   onTap: () {
@@ -1095,7 +1105,7 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
     final userCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final pwdCtrl = TextEditingController();
-    String? selectedRole; // Intentionally NOT set by default as requested
+    String? selectedRole = _isCEO ? null : 'EMPLOYEE'; // Admins can only create Employee accounts
     bool isSubmitting = false;
     bool obscurePassword = true;
 
@@ -1105,7 +1115,10 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Add Account & Assign Role', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              title: Text(
+                _isCEO ? 'Add Account & Assign Role' : 'Add Field Employee Account',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
               content: SingleChildScrollView(
                 child: Form(
                   key: formKey,
@@ -1113,42 +1126,60 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Role Selection (Mandatory - NOT set by default)
-                      DropdownButtonFormField<String>(
-                        value: selectedRole,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Role & Portal Assignment *',
-                          hintText: 'Select Role (Mandatory)',
-                          border: OutlineInputBorder(),
+                      // Role Selection (CEOs can pick Admin/Employee; Admins only Employee)
+                      if (_isCEO) ...[
+                        DropdownButtonFormField<String>(
+                          value: selectedRole,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Role & Portal Assignment *',
+                            hintText: 'Select Role (Mandatory)',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'MANAGER',
+                              child: Text('Regional Manager / Admin (Admin Portal)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'EMPLOYEE',
+                              child: Text('Field Agronomist / Employee (Employee Portal)'),
+                            ),
+                          ],
+                          validator: (v) => v == null ? 'Please select a role' : null,
+                          onChanged: (val) {
+                            setState(() {
+                              selectedRole = val;
+                              if (val == 'MANAGER') {
+                                if (pwdCtrl.text.isEmpty || pwdCtrl.text == 'Emp@Phyto123') {
+                                  pwdCtrl.text = 'Admin@Phyto123';
+                                }
+                              } else if (val == 'EMPLOYEE') {
+                                if (pwdCtrl.text.isEmpty || pwdCtrl.text == 'Admin@Phyto123') {
+                                  pwdCtrl.text = 'Emp@Phyto123';
+                                }
+                              }
+                            });
+                          },
                         ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'MANAGER',
-                            child: Text('Regional Manager / Admin (Admin Portal)'),
+                        const SizedBox(height: 12),
+                      ] else
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.cropGreenLight,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.cropGreen.withOpacity(0.3)),
+                            ),
+                            child: const Text(
+                              'Role: Field Agronomist / Employee',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.cropGreen),
+                            ),
                           ),
-                          DropdownMenuItem(
-                            value: 'EMPLOYEE',
-                            child: Text('Field Agronomist / Employee (Employee Portal)'),
-                          ),
-                        ],
-                        validator: (v) => v == null ? 'Please select a role' : null,
-                        onChanged: (val) {
-                          setState(() {
-                            selectedRole = val;
-                            if (val == 'MANAGER') {
-                              if (pwdCtrl.text.isEmpty || pwdCtrl.text == 'Emp@Phyto123') {
-                                pwdCtrl.text = 'Admin@Phyto123';
-                              }
-                            } else if (val == 'EMPLOYEE') {
-                              if (pwdCtrl.text.isEmpty || pwdCtrl.text == 'Admin@Phyto123') {
-                                pwdCtrl.text = 'Emp@Phyto123';
-                              }
-                            }
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
+                        ),
 
                       TextFormField(
                         controller: nameCtrl,

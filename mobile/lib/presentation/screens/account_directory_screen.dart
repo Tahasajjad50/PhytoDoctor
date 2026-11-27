@@ -826,16 +826,110 @@ Note: You will be prompted to change this temporary password on initial login.
                                 ],
                               ),
                             )
-                          : ListView.separated(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: filteredAccounts.length,
-                              separatorBuilder: (context, index) => const SizedBox(height: 12),
-                              itemBuilder: (context, index) {
-                                final acc = filteredAccounts[index];
-                                final isPasswordRevealed = _revealedPasswords.contains(acc.id);
-                                final isManager = acc.isManager;
+                          : Builder(
+                              builder: (context) {
+                                final adminAccounts = filteredAccounts.where((a) => a.isManager).toList();
+                                final employeeAccounts = filteredAccounts.where((a) => !a.isManager).toList();
+                                return ListView(
+                                  padding: const EdgeInsets.all(16),
+                                  children: [
+                                    if (isCEO || adminAccounts.isNotEmpty) ...[
+                                      _buildSectionHeader(
+                                        icon: Icons.security,
+                                        title: 'Admin Accounts',
+                                        count: adminAccounts.length,
+                                        color: AppTheme.adminSlate,
+                                      ),
+                                      const SizedBox(height: 10),
+                                      if (adminAccounts.isEmpty)
+                                        _buildEmptySectionCard('No admin accounts found.')
+                                      else
+                                        ...adminAccounts.map(
+                                          (acc) => Padding(
+                                            padding: const EdgeInsets.only(bottom: 12),
+                                            child: _buildAccountCard(acc, isCEO),
+                                          ),
+                                        ),
+                                      const SizedBox(height: 12),
+                                    ],
+                                    _buildSectionHeader(
+                                      icon: Icons.badge_outlined,
+                                      title: 'Employee Accounts',
+                                      count: employeeAccounts.length,
+                                      color: AppTheme.botanicalPrimary,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    if (employeeAccounts.isEmpty)
+                                      _buildEmptySectionCard('No employee accounts found.')
+                                    else
+                                      ...employeeAccounts.map(
+                                        (acc) => Padding(
+                                          padding: const EdgeInsets.only(bottom: 12),
+                                          child: _buildAccountCard(acc, isCEO),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                                return Card(
+  Widget _buildSectionHeader({
+    required IconData icon,
+    required String title,
+    required int count,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptySectionCard(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.standardBorderRadius),
+        border: Border.all(color: AppTheme.sageBorder),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+      ),
+    );
+  }
+
+  Widget _buildAccountCard(CreatedAccountModel acc, bool isCEO) {
+    final isPasswordRevealed = _revealedPasswords.contains(acc.id);
+    final isManager = acc.isManager;
+    return Card(
                                   elevation: 0,
                                   color: Colors.white,
                                   shape: RoundedRectangleBorder(
@@ -881,49 +975,25 @@ Note: You will be prompted to change this temporary password on initial login.
                                                 ],
                                               ),
                                             ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                  decoration: BoxDecoration(
-                                                    color: isManager ? AppTheme.adminSlateLight : AppTheme.cropGreenLight,
-                                                    borderRadius: BorderRadius.circular(4),
-                                                    border: Border.all(
-                                                      color: isManager
-                                                          ? AppTheme.adminSlate.withOpacity(0.3)
-                                                          : AppTheme.cropGreen.withOpacity(0.3),
-                                                    ),
-                                                  ),
-                                                  child: Text(
-                                                    isManager ? 'ADMIN' : 'EMPLOYEE',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.w800,
-                                                      color: isManager ? AppTheme.adminSlate : AppTheme.cropGreen,
-                                                    ),
-                                                  ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: isManager ? AppTheme.adminSlateLight : AppTheme.cropGreenLight,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: isManager
+                                                      ? AppTheme.adminSlate.withOpacity(0.3)
+                                                      : AppTheme.cropGreen.withOpacity(0.3),
                                                 ),
-                                                if (acc.mustChangePassword) ...[
-                                                  const SizedBox(width: 4),
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.amber.shade50,
-                                                      borderRadius: BorderRadius.circular(4),
-                                                      border: Border.all(color: Colors.amber.shade400),
-                                                    ),
-                                                    child: const Text(
-                                                      'TEMP PWD',
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        fontWeight: FontWeight.w800,
-                                                        color: Colors.deepOrange,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ],
+                                              ),
+                                              child: Text(
+                                                isManager ? 'ADMIN' : 'EMPLOYEE',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isManager ? AppTheme.adminSlate : AppTheme.cropGreen,
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -1137,12 +1207,5 @@ Note: You will be prompted to change this temporary password on initial login.
                                     ),
                                   ),
                                 );
-                              },
-                            ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

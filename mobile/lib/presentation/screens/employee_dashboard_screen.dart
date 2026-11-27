@@ -78,6 +78,13 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
     _loadAttendanceStatus();
   }
 
+  String _formatTime12h(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$m $period';
+  }
+
   Future<void> _loadAttendanceStatus() async {
     final token = widget.user.accessToken;
     if (token == null || token.isEmpty) return;
@@ -487,7 +494,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                 const SizedBox(height: 2),
                                                 Text(
                                                   _clockInTime != null
-                                                      ? '${_clockInTime!.hour.toString().padLeft(2, '0')}:${_clockInTime!.minute.toString().padLeft(2, '0')} ${_clockInTime!.hour >= 12 ? 'PM' : 'AM'}'
+                                                      ? _formatTime12h(_clockInTime!)
                                                       : '--:--',
                                                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textMain),
                                                 ),
@@ -502,7 +509,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
                                                 const SizedBox(height: 2),
                                                 Text(
                                                   _clockOutTime != null
-                                                      ? '${_clockOutTime!.hour.toString().padLeft(2, '0')}:${_clockOutTime!.minute.toString().padLeft(2, '0')} ${_clockOutTime!.hour >= 12 ? 'PM' : 'AM'}'
+                                                      ? _formatTime12h(_clockOutTime!)
                                                       : (_isAttendanceActive ? 'On Duty' : '--:--'),
                                                   style: TextStyle(
                                                     fontSize: 13,

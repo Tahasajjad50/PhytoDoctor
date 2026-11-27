@@ -43,7 +43,7 @@ class _SupervisionManagementScreenState extends State<SupervisionManagementScree
           'Accept': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
         },
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 20));
 
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);

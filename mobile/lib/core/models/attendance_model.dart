@@ -1,3 +1,28 @@
+DateTime? parsePakistanTime(dynamic raw) {
+  if (raw == null) return null;
+  final s = raw.toString().trim();
+  if (s.isEmpty) return null;
+  final parsed = DateTime.tryParse(s);
+  if (parsed == null) return null;
+  final hasOffset = s.endsWith('Z') ||
+      s.endsWith('z') ||
+      RegExp(r'[+-]\d{2}:?\d{2}$').hasMatch(s);
+  final utcDt = (parsed.isUtc || hasOffset)
+      ? parsed.toUtc()
+      : DateTime.utc(
+          parsed.year,
+          parsed.month,
+          parsed.day,
+          parsed.hour,
+          parsed.minute,
+          parsed.second,
+          parsed.millisecond,
+          parsed.microsecond,
+        );
+  // Convert explicitly to Pakistan Standard Time (UTC+5)
+  return utcDt.add(const Duration(hours: 5));
+}
+
 class AttendanceStatusModel {
   final bool isActive;
   final DateTime? clockInTime;
@@ -16,8 +41,8 @@ class AttendanceStatusModel {
   factory AttendanceStatusModel.fromJson(Map<String, dynamic> json) {
     return AttendanceStatusModel(
       isActive: json['is_active'] == true,
-      clockInTime: json['clock_in_time'] != null ? DateTime.tryParse(json['clock_in_time'])?.toLocal() : null,
-      clockOutTime: json['clock_out_time'] != null ? DateTime.tryParse(json['clock_out_time'])?.toLocal() : null,
+      clockInTime: parsePakistanTime(json['clock_in_time']),
+      clockOutTime: parsePakistanTime(json['clock_out_time']),
       date: json['date']?.toString() ?? '',
       message: json['message']?.toString() ?? '',
     );
@@ -53,8 +78,8 @@ class EmployeeAttendanceItemModel {
       phone: json['phone']?.toString(),
       designation: json['designation']?.toString(),
       isActiveNow: json['is_active_now'] == true,
-      clockInTime: json['clock_in_time'] != null ? DateTime.tryParse(json['clock_in_time'])?.toLocal() : null,
-      clockOutTime: json['clock_out_time'] != null ? DateTime.tryParse(json['clock_out_time'])?.toLocal() : null,
+      clockInTime: parsePakistanTime(json['clock_in_time']),
+      clockOutTime: parsePakistanTime(json['clock_out_time']),
     );
   }
 }

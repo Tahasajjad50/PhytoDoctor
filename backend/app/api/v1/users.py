@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import secrets
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin, require_owner
@@ -161,12 +161,7 @@ async def list_created_accounts(
         query = (
             select(User, Creator.full_name.label("creator_name"))
             .outerjoin(Creator, User.created_by_id == Creator.id)
-            .where(
-                or_(
-                    User.created_by_id == current_user.id,
-                    User.manager_id == current_user.id
-                )
-            )
+            .where(User.created_by_id == current_user.id)
             .where(User.id != current_user.id)
             .where(User.role == UserRole.EMPLOYEE.value)
             .order_by(User.created_at.desc())
@@ -246,11 +241,11 @@ async def get_supervision_list(
     )
 
     if not is_owner:
-        # Manager only sees employees assigned to them OR created by them
+        # Manager sees employees they currently supervise, or unassigned employees they created
         query = query.where(
             or_(
                 User.manager_id == current_user.id,
-                User.created_by_id == current_user.id
+                and_(User.manager_id.is_(None), User.created_by_id == current_user.id),
             )
         )
 
@@ -260,7 +255,7 @@ async def get_supervision_list(
 
     employees = []
     for emp, mgr_name, mgr_user, creator_name in rows:
-        can_transfer = is_owner or (emp.manager_id == current_user.id or emp.created_by_id == current_user.id)
+        can_transfer = is_owner or (emp.manager_id == current_user.id) or (emp.manager_id is None and emp.created_by_id == current_user.id)
         employees.append(
             EmployeeSupervisionItem(
                 id=emp.id,
@@ -305,10 +300,10 @@ async def transfer_employee_supervision(
 
     # Permission check:
     if not is_owner:
-        if employee.manager_id != current_user.id and employee.created_by_id != current_user.id:
+        if employee.manager_id != current_user.id and not (employee.manager_id is None and employee.created_by_id == current_user.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: You can only transfer employees that you created or supervise."
+                detail="Access denied: You can only transfer employees you supervise or created."
             )
 
     new_manager_name = "Unassigned"
@@ -560,7 +555,7 @@ async def update_account_credentials(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     if current_user.role == UserRole.MANAGER.value:
-        if (target_user.created_by_id != current_user.id and target_user.manager_id != current_user.id) or target_user.role != UserRole.EMPLOYEE.value:
+        if target_user.created_by_id != current_user.id or target_user.role != UserRole.EMPLOYEE.value:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You only have authority to manage credentials of employees you created.",
@@ -654,12 +649,10 @@ async def reveal_user_credential(
 
     # Strict authorization enforcement
     if current_user.role == UserRole.MANAGER.value:
-        is_supervisor = target_user.manager_id == current_user.id
-        is_creator = target_user.created_by_id == current_user.id
-        if not (is_supervisor or is_creator):
+        if target_user.created_by_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: You are not authorized to view credentials for this user."
+                detail="Access denied: You can only view credentials for accounts you created."
             )
 
     now_utc = datetime.now(timezone.utc)

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, date
+from datetime import datetime, timedelta, timezone, date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -11,6 +11,13 @@ from app.models.attendance import Attendance
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/attendance", tags=["Attendance"])
+
+PKT = timezone(timedelta(hours=5))
+
+def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 
 class AttendanceStatusResponse(BaseModel):
     is_active: bool
@@ -47,7 +54,7 @@ async def clock_in(
             detail="Attendance clock-in is only available for Field Agronomists/Employees."
         )
 
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(PKT).date()
     now = datetime.now(timezone.utc)
 
     # Check for existing record for today
@@ -60,8 +67,8 @@ async def clock_in(
     if existing and existing.is_active:
         return AttendanceStatusResponse(
             is_active=True,
-            clock_in_time=existing.clock_in_time,
-            clock_out_time=existing.clock_out_time,
+            clock_in_time=_ensure_utc(existing.clock_in_time),
+            clock_out_time=_ensure_utc(existing.clock_out_time),
             date=today,
             message="Already clocked in and active."
         )
@@ -75,7 +82,7 @@ async def clock_in(
         await db.refresh(existing)
         return AttendanceStatusResponse(
             is_active=True,
-            clock_in_time=existing.clock_in_time,
+            clock_in_time=_ensure_utc(existing.clock_in_time),
             clock_out_time=None,
             date=today,
             message="Marked as Active (Clocked In)."
@@ -95,7 +102,7 @@ async def clock_in(
 
     return AttendanceStatusResponse(
         is_active=True,
-        clock_in_time=new_record.clock_in_time,
+        clock_in_time=_ensure_utc(new_record.clock_in_time),
         clock_out_time=None,
         date=today,
         message="Marked as Active (Clocked In)."
@@ -112,7 +119,7 @@ async def clock_out(
             detail="Attendance clock-out is only available for Field Agronomists/Employees."
         )
 
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(PKT).date()
     now = datetime.now(timezone.utc)
 
     stmt = select(Attendance).where(
@@ -135,8 +142,8 @@ async def clock_out(
         await db.refresh(record)
         return AttendanceStatusResponse(
             is_active=False,
-            clock_in_time=record.clock_in_time,
-            clock_out_time=record.clock_out_time,
+            clock_in_time=_ensure_utc(record.clock_in_time),
+            clock_out_time=_ensure_utc(record.clock_out_time),
             date=today,
             message="Marked as Inactive (Clocked Out)."
         )
@@ -148,8 +155,8 @@ async def clock_out(
 
     return AttendanceStatusResponse(
         is_active=False,
-        clock_in_time=existing.clock_in_time,
-        clock_out_time=existing.clock_out_time,
+        clock_in_time=_ensure_utc(existing.clock_in_time),
+        clock_out_time=_ensure_utc(existing.clock_out_time),
         date=today,
         message="Marked as Inactive (Clocked Out)."
     )
@@ -159,7 +166,7 @@ async def get_attendance_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(PKT).date()
 
     stmt = select(Attendance).where(
         and_(Attendance.user_id == current_user.id, Attendance.date == today)
@@ -170,8 +177,8 @@ async def get_attendance_status(
     if existing:
         return AttendanceStatusResponse(
             is_active=existing.is_active,
-            clock_in_time=existing.clock_in_time,
-            clock_out_time=existing.clock_out_time,
+            clock_in_time=_ensure_utc(existing.clock_in_time),
+            clock_out_time=_ensure_utc(existing.clock_out_time),
             date=today,
             message="Active on portal" if existing.is_active else "Off duty / Inactive"
         )
@@ -189,7 +196,7 @@ async def get_admin_attendance_roster(
     admin_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(PKT).date()
 
     # Query active employees (Managers see supervised/assigned team; Owner sees all)
     if admin_user.role == UserRole.MANAGER.value:
@@ -199,7 +206,7 @@ async def get_admin_attendance_roster(
                 User.is_active == True,
                 or_(
                     User.manager_id == admin_user.id,
-                    User.created_by_id == admin_user.id
+                    and_(User.manager_id.is_(None), User.created_by_id == admin_user.id)
                 )
             )
         ).order_by(User.full_name.asc())
@@ -233,8 +240,8 @@ async def get_admin_attendance_roster(
                 phone=emp.phone,
                 designation=emp.designation,
                 is_active_now=is_active_now,
-                clock_in_time=att.clock_in_time if att else None,
-                clock_out_time=att.clock_out_time if att else None
+                clock_in_time=_ensure_utc(att.clock_in_time) if att else None,
+                clock_out_time=_ensure_utc(att.clock_out_time) if att else None
             )
         )
 

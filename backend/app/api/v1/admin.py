@@ -1,6 +1,6 @@
 import io
 import json
-from datetime import datetime, timezone, time
+from datetime import datetime, timedelta, timezone, time
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -266,24 +266,30 @@ async def export_audit_report(
             return "'" + val
         return val
 
+    PKT = timezone(timedelta(hours=5))
+
     def make_utc_aware(dt):
         if dt is None:
             return None
         return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+    def to_pkt(dt):
+        aware = make_utc_aware(dt)
+        return aware.astimezone(PKT) if aware else None
 
     # --- Sheet 1: Visit Records ---
     ws_visits = wb.active
     ws_visits.title = "Visit Records"
     style_header(ws_visits, [
         "Visit ID", "Employee Name", "Username", "Client Name", "Client Phone",
-        "Capture Time (UTC)", "Latitude", "Longitude", "GPS Coordinates",
+        "Capture Time (PKT)", "Latitude", "Longitude", "GPS Coordinates",
         "GPS Accuracy (m)", "Mock Location", "Verification Status",
         "Rejection / Review Reason", "Field Notes", "Photo URL (Cloudinary)"
     ])
     for v in visits_list:
         emp = user_map.get(v.employee_id)
-        cap_dt = make_utc_aware(v.device_capture_time)
-        cap_str = cap_dt.strftime("%Y-%m-%d %H:%M:%S") if cap_dt else ""
+        cap_dt = to_pkt(v.device_capture_time)
+        cap_str = cap_dt.strftime("%Y-%m-%d %I:%M:%S %p") if cap_dt else ""
         ws_visits.append([
             v.id,
             safe_cell(emp.full_name if emp else "Unknown"),
@@ -306,16 +312,16 @@ async def export_audit_report(
     # --- Sheet 2: Daily Attendance ---
     ws_att = wb.create_sheet(title="Daily Attendance")
     style_header(ws_att, [
-        "Date", "Employee Name", "Username", "Mark In Time (UTC)",
-        "Mark Out Time (UTC)", "Working Hours", "Status",
+        "Date", "Employee Name", "Username", "Mark In Time (PKT)",
+        "Mark Out Time (PKT)", "Working Hours", "Status",
         "Day Visits Count", "First Visit GPS Coordinates", "Last Visit GPS Coordinates"
     ])
     for a in attendance_list:
         emp = user_map.get(a.user_id)
-        cin = make_utc_aware(a.clock_in_time)
-        cout = make_utc_aware(a.clock_out_time)
-        mark_in_str = cin.strftime("%Y-%m-%d %H:%M:%S") if cin else ""
-        mark_out_str = cout.strftime("%Y-%m-%d %H:%M:%S") if cout else "Still Clocked In"
+        cin = to_pkt(a.clock_in_time)
+        cout = to_pkt(a.clock_out_time)
+        mark_in_str = cin.strftime("%Y-%m-%d %I:%M:%S %p") if cin else ""
+        mark_out_str = cout.strftime("%Y-%m-%d %I:%M:%S %p") if cout else "Still Clocked In"
         hours_str = "Active"
         if cin and cout:
             diff_hrs = (cout - cin).total_seconds() / 3600.0

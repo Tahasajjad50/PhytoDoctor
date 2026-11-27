@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
 import 'app_update_service.dart';
+import 'auth_service.dart';
 import 'chat_service.dart';
 import 'notification_service.dart';
 
@@ -14,6 +17,8 @@ class ChatNotificationMonitor {
   ChatService? _chatService;
   Timer? _pollingTimer;
   final Set<String> _seenMessageKeys = {};
+  final Set<String> _seenVisitIds = {};
+  bool _visitsSeeded = false;
   bool _isChecking = false;
   int _pollCounter = 0;
   String? _notifiedUpdateVersion;
@@ -21,6 +26,9 @@ class ChatNotificationMonitor {
   void start(UserModel user) {
     _currentUser = user;
     _chatService = ChatService(token: user.accessToken);
+    _seenVisitIds.clear();
+    _visitsSeeded = false;
+    NotificationService().initialize();
     _pollingTimer?.cancel();
     _checkForNewMessages();
     _pollingTimer = Timer.periodic(const Duration(seconds: 7), (_) {
@@ -34,6 +42,8 @@ class ChatNotificationMonitor {
     _pollingTimer = null;
     _currentUser = null;
     _chatService = null;
+    _seenVisitIds.clear();
+    _visitsSeeded = false;
     debugPrint('[ChatNotificationMonitor] Stopped');
   }
 
@@ -74,6 +84,9 @@ class ChatNotificationMonitor {
         }
       }
 
+      // Check for newly submitted field visits for CEO and assigned Admins
+      await _checkForNewFieldVisits();
+
       // Periodically check for pushed app updates (~every 28s)
       _pollCounter++;
       if (_pollCounter % 4 == 1) {
@@ -94,6 +107,74 @@ class ChatNotificationMonitor {
       // Quiet background polling failure
     } finally {
       _isChecking = false;
+    }
+  }
+
+  Future<void> _checkForNewFieldVisits() async {
+    final user = _currentUser;
+    if (user == null) return;
+    final role = user.role.toUpperCase();
+    if (!user.isOwner && role != 'MANAGER') return;
+    final token = user.accessToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits?status=PENDING&limit=20');
+      final res = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode != 200) return;
+      final decoded = jsonDecode(res.body);
+      final List<dynamic> items = decoded is Map ? (decoded['items'] ?? []) : (decoded is List ? decoded : []);
+
+      for (final raw in items) {
+        if (raw is! Map) continue;
+        final visitId = raw['id']?.toString() ?? '';
+        if (visitId.isEmpty || _seenVisitIds.contains(visitId)) continue;
+        _seenVisitIds.add(visitId);
+
+        final receiptStr = (raw['server_receipt_time'] ?? raw['device_capture_time'])?.toString();
+        bool isRecent = true;
+        if (receiptStr != null && receiptStr.isNotEmpty) {
+          final dt = DateTime.tryParse(receiptStr);
+          if (dt != null) {
+            isRecent = DateTime.now().toUtc().difference(dt.toUtc()).inMinutes < 10;
+          }
+        }
+
+        // On initial poll, notify only if submitted within the last 2 minutes; afterwards notify all newly arriving visits
+        bool shouldNotify = _visitsSeeded;
+        if (!_visitsSeeded && receiptStr != null && receiptStr.isNotEmpty) {
+          final dt = DateTime.tryParse(receiptStr);
+          if (dt != null) {
+            shouldNotify = DateTime.now().toUtc().difference(dt.toUtc()).inMinutes < 2;
+          }
+        }
+
+        if (shouldNotify && isRecent) {
+          final clientName = (raw['client_name']?.toString().trim().isNotEmpty == true)
+              ? raw['client_name'].toString().trim()
+              : 'Field Visit';
+          final officerName = (raw['employee_name']?.toString().trim().isNotEmpty == true)
+              ? raw['employee_name'].toString().trim()
+              : ((raw['officer']?.toString().trim().isNotEmpty == true) ? raw['officer'].toString().trim() : 'Field Officer');
+
+          NotificationService().showMessageNotification(
+            title: 'New Visit: $clientName',
+            body: '$officerName shared a field visit for verification.',
+            payload: 'visit:$visitId',
+            id: 200000 + (visitId.hashCode.abs() % 100000),
+          );
+        }
+      }
+      _visitsSeeded = true;
+    } catch (_) {
+      // Quietly ignore transient network hiccups
     }
   }
 
