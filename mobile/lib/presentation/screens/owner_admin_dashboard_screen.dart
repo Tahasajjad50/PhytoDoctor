@@ -359,6 +359,14 @@ class _OwnerAdminDashboardScreenState extends State<OwnerAdminDashboardScreen> {
                       value: '$_todayVisits Visits',
                       subtitle: '$_verifiedVisits Verified / $_pendingCount Pending',
                       color: AppTheme.botanicalPrimary,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ManagerDashboardScreen(user: user),
+                          ),
+                        ).then((_) => _fetchLiveStats());
+                      },
                     ),
                   ),
                 ],

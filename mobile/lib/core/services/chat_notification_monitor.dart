@@ -18,7 +18,9 @@ class ChatNotificationMonitor {
   Timer? _pollingTimer;
   final Set<String> _seenMessageKeys = {};
   final Set<String> _seenVisitIds = {};
+  final Map<String, String> _knownEmployeeVisitStatuses = {};
   bool _visitsSeeded = false;
+  bool _employeeVisitsSeeded = false;
   bool _isChecking = false;
   int _pollCounter = 0;
   String? _notifiedUpdateVersion;
@@ -27,7 +29,9 @@ class ChatNotificationMonitor {
     _currentUser = user;
     _chatService = ChatService(token: user.accessToken);
     _seenVisitIds.clear();
+    _knownEmployeeVisitStatuses.clear();
     _visitsSeeded = false;
+    _employeeVisitsSeeded = false;
     NotificationService().initialize();
     _pollingTimer?.cancel();
     _checkForNewMessages();
@@ -43,7 +47,9 @@ class ChatNotificationMonitor {
     _currentUser = null;
     _chatService = null;
     _seenVisitIds.clear();
+    _knownEmployeeVisitStatuses.clear();
     _visitsSeeded = false;
+    _employeeVisitsSeeded = false;
     debugPrint('[ChatNotificationMonitor] Stopped');
   }
 
@@ -84,8 +90,9 @@ class ChatNotificationMonitor {
         }
       }
 
-      // Check for newly submitted field visits for CEO and assigned Admins
+      // Check for newly submitted field visits for CEO/Admin, or visit status updates for Employees
       await _checkForNewFieldVisits();
+      await _checkForEmployeeVisitUpdates();
 
       // Periodically check for pushed app updates (~every 28s)
       _pollCounter++;
@@ -166,13 +173,76 @@ class ChatNotificationMonitor {
 
           NotificationService().showMessageNotification(
             title: 'New Visit: $clientName',
-            body: '$officerName shared a field visit for verification.',
+            body: '$officerName has uploaded a visit. Click to review.',
             payload: 'visit:$visitId',
             id: 200000 + (visitId.hashCode.abs() % 100000),
           );
         }
       }
       _visitsSeeded = true;
+    } catch (_) {
+      // Quietly ignore transient network hiccups
+    }
+  }
+
+  Future<void> _checkForEmployeeVisitUpdates() async {
+    final user = _currentUser;
+    if (user == null || user.isAdmin) return;
+    final token = user.accessToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final url = Uri.parse('${AuthService.defaultBaseUrl}/api/v1/visits?limit=20');
+      final res = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode != 200) return;
+      final decoded = jsonDecode(res.body);
+      final List<dynamic> items = decoded is Map ? (decoded['items'] ?? []) : (decoded is List ? decoded : []);
+
+      for (final raw in items) {
+        if (raw is! Map) continue;
+        final visitId = raw['id']?.toString() ?? '';
+        final status = (raw['status']?.toString() ?? '').toUpperCase();
+        if (visitId.isEmpty || status.isEmpty) continue;
+
+        final prevStatus = _knownEmployeeVisitStatuses[visitId];
+        _knownEmployeeVisitStatuses[visitId] = status;
+
+        final isFinal = status == 'VERIFIED' || status == 'REJECTED';
+        if (!isFinal) continue;
+
+        bool shouldNotify = _employeeVisitsSeeded && prevStatus != status;
+        if (!_employeeVisitsSeeded) {
+          final verifiedAtStr = raw['verified_at']?.toString();
+          if (verifiedAtStr != null && verifiedAtStr.isNotEmpty) {
+            final dt = DateTime.tryParse(verifiedAtStr);
+            if (dt != null) {
+              shouldNotify = DateTime.now().toUtc().difference(dt.toUtc()).inMinutes < 2;
+            }
+          }
+        }
+
+        if (shouldNotify) {
+          final clientName = (raw['client_name']?.toString().trim().isNotEmpty == true)
+              ? raw['client_name'].toString().trim()
+              : 'Your field visit';
+          final actionWord = status == 'VERIFIED' ? 'approved' : 'rejected';
+
+          NotificationService().showMessageNotification(
+            title: status == 'VERIFIED' ? 'Visit Approved' : 'Visit Rejected',
+            body: '$clientName has been $actionWord.',
+            payload: 'visit_status:$visitId',
+            id: 300000 + (visitId.hashCode.abs() % 100000),
+          );
+        }
+      }
+      _employeeVisitsSeeded = true;
     } catch (_) {
       // Quietly ignore transient network hiccups
     }

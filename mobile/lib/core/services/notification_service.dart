@@ -1,6 +1,9 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import '../../main.dart' show appNavigatorKey;
+import '../../presentation/screens/manager_dashboard_screen.dart';
 import 'app_update_service.dart';
+import 'auth_service.dart';
 import 'native_platform_service.dart';
 
 class NotificationService {
@@ -37,6 +40,16 @@ class NotificationService {
   void _handleNotificationPayload(String payload) {
     if (payload == 'app_update') {
       AppUpdateService.handleUpdateNotificationTap();
+    } else if (payload.startsWith('visit:')) {
+      final user = AuthService.activeSessionUser;
+      final nav = appNavigatorKey.currentState;
+      if (user != null && user.isAdmin && nav != null) {
+        nav.push(
+          MaterialPageRoute(
+            builder: (_) => ManagerDashboardScreen(user: user),
+          ),
+        );
+      }
     }
   }
 
