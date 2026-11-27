@@ -120,5 +120,56 @@ class NativePlatformService {
       return false;
     }
   }
+
+  /// Registers a callback invoked when the user taps an Android notification
+  static void setNotificationTapHandler(void Function(String payload) onTap) {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onNotificationTapped') {
+        final payload = (call.arguments as String?) ?? '';
+        onTap(payload);
+      }
+    });
+  }
+
+  /// Returns the notification payload if the app was cold-launched from a notification
+  static Future<String?> getInitialNotificationPayload() async {
+    try {
+      return await _channel.invokeMethod<String>('getInitialNotificationPayload');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Displays or updates a download progress notification in the Android notification bar
+  static Future<bool> showProgressNotification({
+    required String title,
+    required String body,
+    int id = 999998,
+    int progress = 0,
+    int maxProgress = 100,
+    bool ongoing = false,
+  }) async {
+    try {
+      final res = await _channel.invokeMethod<bool>('showProgressNotification', {
+        'title': title,
+        'body': body,
+        'id': id,
+        'progress': progress,
+        'maxProgress': maxProgress,
+        'ongoing': ongoing,
+      });
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Launches the Android package installer for a downloaded APK file
+  static Future<Map<String, dynamic>> installApk(String filePath) async {
+    final res = await _channel.invokeMapMethod<String, dynamic>('installApk', {
+      'filePath': filePath,
+    });
+    return res ?? {'started': false, 'needsPermission': false};
+  }
 }
 

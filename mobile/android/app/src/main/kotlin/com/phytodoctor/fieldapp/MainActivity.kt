@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Looper
 import android.provider.MediaStore
+import android.provider.Settings
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -33,11 +34,32 @@ class MainActivity: FlutterActivity() {
     private val PERMISSION_REQUEST_CODE = 2001
     private val CAMERA_REQUEST_CODE = 2002
     private val NOTIFICATION_REQUEST_CODE = 2003
+    private val INSTALL_PERMISSION_REQUEST_CODE = 2004
     private val NOTIFICATION_CHANNEL_ID = "phytodoctor_chat_channel"
 
+    private var nativeChannel: MethodChannel? = null
+    private var initialNotificationPayload: String? = null
+    private var pendingInstallApkPath: String? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var pendingCameraResult: MethodChannel.Result? = null
     private var currentPhotoPath: String? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (intent?.getBooleanExtra("from_notification", false) == true) {
+            initialNotificationPayload = intent?.getStringExtra("payload")
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("from_notification", false)) {
+            val payload = intent.getStringExtra("payload") ?: ""
+            initialNotificationPayload = payload
+            nativeChannel?.invokeMethod("onNotificationTapped", payload)
+        }
+    }
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -312,12 +334,92 @@ class MainActivity: FlutterActivity() {
                         result.error("LOCATION_ERROR", e.message, null)
                     }
                 }
+                "showProgressNotification" -> {
+                    val title = call.argument<String>("title") ?: "Phyto Doctor Update"
+                    val body = call.argument<String>("body") ?: ""
+                    val id = call.argument<Int>("id") ?: 999998
+                    val progress = call.argument<Int>("progress") ?: 0
+                    val maxProgress = call.argument<Int>("maxProgress") ?: 100
+                    val ongoing = call.argument<Boolean>("ongoing") ?: false
+
+                    try {
+                        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                            .setSmallIcon(R.mipmap.ic_launcher)
+                            .setContentTitle(title)
+                            .setContentText(body)
+                            .setPriority(NotificationCompat.PRIORITY_LOW)
+                            .setOnlyAlertOnce(true)
+                            .setOngoing(ongoing)
+                            .setAutoCancel(!ongoing)
+                        if (maxProgress > 0 && ongoing) {
+                            builder.setProgress(maxProgress, progress, false)
+                        } else {
+                            builder.setProgress(0, 0, false)
+                        }
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                        ) {
+                            NotificationManagerCompat.from(this).notify(id, builder.build())
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("NOTIFICATION_ERROR", e.message, null)
+                    }
+                }
+                "getInitialNotificationPayload" -> {
+                    val payload = initialNotificationPayload
+                    initialNotificationPayload = null
+                    result.success(payload)
+                }
+                "installApk" -> {
+                    val filePath = call.argument<String>("filePath")
+                    if (filePath.isNullOrEmpty()) {
+                        result.error("INSTALL_ERROR", "Missing filePath", null)
+                        return@MethodCallHandler
+                    }
+                    val apkFile = File(filePath)
+                    if (!apkFile.exists() || apkFile.length() == 0L) {
+                        result.error("INSTALL_ERROR", "APK file not found: $filePath", null)
+                        return@MethodCallHandler
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+                        pendingInstallApkPath = filePath
+                        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                            data = Uri.parse("package:$packageName")
+                        }
+                        startActivityForResult(intent, INSTALL_PERMISSION_REQUEST_CODE)
+                        result.success(mapOf("started" to false, "needsPermission" to true))
+                        return@MethodCallHandler
+                    }
+                    try {
+                        launchApkInstaller(apkFile)
+                        result.success(mapOf("started" to true, "needsPermission" to false))
+                    } catch (e: Exception) {
+                        result.error("INSTALL_ERROR", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler(handler)
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        channel.setMethodCallHandler(handler)
+        nativeChannel = channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LEGACY_CHANNEL).setMethodCallHandler(handler)
+    }
+
+    private fun launchApkInstaller(apkFile: File) {
+        val apkUri = FileProvider.getUriForFile(
+            this,
+            "${applicationContext.packageName}.fileprovider",
+            apkFile
+        )
+        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(apkUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(installIntent)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -343,6 +445,17 @@ class MainActivity: FlutterActivity() {
                 pendingCameraResult?.success(null) // User dismissed/cancelled camera
             }
             pendingCameraResult = null
+        } else if (requestCode == INSTALL_PERMISSION_REQUEST_CODE) {
+            val path = pendingInstallApkPath
+            pendingInstallApkPath = null
+            if (path != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.canRequestPackageInstalls()) {
+                val apkFile = File(path)
+                if (apkFile.exists() && apkFile.length() > 0L) {
+                    try {
+                        launchApkInstaller(apkFile)
+                    } catch (_: Exception) {}
+                }
+            }
         }
     }
 }

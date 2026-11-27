@@ -10,6 +10,8 @@ import 'presentation/screens/admin_dashboard_screen.dart';
 import 'presentation/screens/employee_dashboard_screen.dart';
 import 'presentation/screens/portal_selection_screen.dart';
 
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -37,14 +39,28 @@ void main() async {
   runApp(PhytoDoctorApp(initialUser: savedUser));
 }
 
-class PhytoDoctorApp extends StatelessWidget {
+class PhytoDoctorApp extends StatefulWidget {
   final UserModel? initialUser;
 
   const PhytoDoctorApp({Key? key, this.initialUser}) : super(key: key);
 
   @override
+  State<PhytoDoctorApp> createState() => _PhytoDoctorAppState();
+}
+
+class _PhytoDoctorAppState extends State<PhytoDoctorApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService().checkInitialLaunchPayload();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: AppConfig.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
@@ -53,11 +69,11 @@ class PhytoDoctorApp extends StatelessWidget {
   }
 
   Widget _resolveInitialScreen() {
-    if (initialUser != null && initialUser!.isActive) {
-      if (initialUser!.isAdmin) {
-        return AdminDashboardScreen(user: initialUser!);
+    if (widget.initialUser != null && widget.initialUser!.isActive) {
+      if (widget.initialUser!.isAdmin) {
+        return AdminDashboardScreen(user: widget.initialUser!);
       } else {
-        return EmployeeDashboardScreen(user: initialUser!);
+        return EmployeeDashboardScreen(user: widget.initialUser!);
       }
     }
     return const PortalSelectionScreen();
